@@ -267,8 +267,10 @@ try {
 
         while ($waited <= 180) {
             $out = [];
-            exec(sprintf('dig +tries=1 +time=3 @ns1.linode.com %s TXT +noall +answer 2>/dev/null',
-                escapeshellarg($fqdn)), $out);
+            exec(sprintf(
+                'dig +tries=1 +time=3 @ns1.linode.com %s TXT +noall +answer 2>/dev/null',
+                escapeshellarg($fqdn)
+            ), $out);
 
             foreach ($out as $line) {
                 if (preg_match('/^\S+\s+(\d+)\s+IN\s+TXT\s/', $line, $m) === 1) {
