@@ -143,24 +143,33 @@ read off the live API on 12 September 2026.
   `X-Spec-Version: 4.235.1` against a document at 4.215.0.
 - **Linode's DNS has no SSHFP, TLSA, NAPTR, DNSKEY or DS.** `RecordType` is the complete set.
 
-## On a version bump, grep the tree for the constraint you just superseded
+## The constraint to write is the one sentence a release can make harmful
 
-The constraint appears in more places than the file you are editing, and the CHANGELOG is the
-one you will remember. `0.2.0` shipped with a README still telling readers `^0.1` is the
-constraint to write — which resolves to `0.1.0` and therefore excludes the release they are
-reading about, with a paragraph underneath explaining that a `0.2.0` will not arrive unasked.
+Most documentation goes stale. **A README that tells a reader what to pin states a fact a
+release can falsify**, and falsifying it does not leave the reader merely out of date — it
+sends them somewhere worse than silence would have.
 
-**Reviewing the release diff cannot find this**, because the stale line is in a file the
-release did not touch. One command does:
+`0.2.0` shipped saying `^0.1` is the constraint to write. That resolves to `0.1.0`, so it
+excludes the release whose README it is. Underneath it, a paragraph explained that Composer
+reads `^0.1` as `>=0.1.0 <0.2.0` so a `0.2.0` "will not arrive unasked" — and **the reassuring
+paragraph is the half that does the damage**, because it answers the doubt that would otherwise
+have sent the reader to the CHANGELOG.
+
+**Reviewing the release diff cannot find it**, because the stale line is in a file the release
+did not touch. One command can, and it belongs in the bump rather than in an intention to be
+careful:
 
 ```bash
 git grep -nF '^0.1'
 ```
 
-Found in this package by its first consumer, who hit the same thing in their own tree — the
+Found by this package's first consumer, who hit the same thing in their own tree — the
 constraint was in three files there, against a list of edits that named one. Fixed in `0.2.1`.
-`~/.claude/rules/stale-documentation.md` is the general form of this and was written before any
-of it.
+
+`~/.claude/rules/stale-documentation.md` is the general form and predates all of it; its own
+opening incident is a session that documented the mechanism and then walked into it the same
+afternoon. This is the third instance in a document whose argument is that this keeps
+happening, which is the argument for a command rather than a resolution.
 
 ## The harness
 
