@@ -58,45 +58,41 @@ jobs:
         with:
           php-version: '8.3'
           coverage: none
+          # Both tools are dev dependencies that the --no-dev install below deletes, so
+          # they have to come from outside the package. setup-php puts them outside every
+          # vendor tree, which for PHPStan is load-bearing rather than merely tidy: run
+          # from inside one, it picks up the autoloader sitting beside it and every
+          # package THAT tree has installed resolves in the analysed code - so the check
+          # passes on exactly the undeclared class it exists to catch.
+          tools: phpstan, composer-require-checker
 
-      # Two checks here, and they catch different things. This one needs the dev
-      # dependencies PRESENT, so it goes first: composer-require-checker maps every symbol
-      # src/ uses back to the package that provides it, and a package that is not installed
-      # cannot be mapped. It is the only half that sees a TRANSITIVE dependency - one
-      # arriving through something we did declare, which survives --no-dev and so reports
-      # clean below - and the only half that sees a missing ext-*, which is invisible to
-      # static analysis because a function from an absent extension looks exactly like one
-      # from core. ext-ctype was undeclared from 0.1.0 to 0.3.0 for precisely that reason,
-      # with the check below green on every push.
-      - run: composer install --prefer-dist --no-progress
-
-      # Same shape as the phpstan step below, and the same trap: composer -d does not
-      # create the directory.
-      - run: |
-          mkdir -p /tmp/crc
-          composer -d /tmp/crc require maglnet/composer-require-checker --no-progress
-          /tmp/crc/vendor/bin/composer-require-checker check composer.json
-
-      # Now analyse src/ with the dev dependencies gone, so anything it calls that is not in
-      # "require" comes back as not-found. A normal PHPStan run has guzzle and phpunit
-      # installed and sees nothing wrong, and the package would fatal for the consumer
-      # instead. It matters here more than most - the whole point of this package is that it
-      # needs four PSR interfaces and nothing else.
+      # One install serves both checks. The dev-free tree is what a consumer actually
+      # gets, which is the closure worth analysing; and the checker does not need the dev
+      # packages present, because its known-symbol set is built from what "require" NAMES
+      # rather than from what is in vendor/. A symbol supplied by a dev dependency is
+      # reported with that dependency sitting right there on disk.
       - run: composer install --no-dev --prefer-dist --no-progress
 
-      # PHPStan is itself a dev dependency, so --no-dev just deleted it. It has to come
-      # from outside the package. composer -d does not create the directory, so mkdir
-      # first or the step dies with "Invalid working directory specified".
-      - run: |
-          mkdir -p /tmp/phpstan
-          composer -d /tmp/phpstan require phpstan/phpstan --no-progress
+      # The primary check, and the only one that sees two of the three failure modes.
+      #
+      # A TRANSITIVE dependency - a class reached through something else we declared -
+      # survives --no-dev and so is invisible to the analysis below; it breaks for the
+      # consumer the day that intermediate package drops it. A missing ext-* is invisible
+      # to static analysis entirely, because a function from an absent extension looks
+      # exactly like one from core; this reports it and guesses the extension.
+      - run: composer-require-checker check composer.json
 
-      # -c is not optional. Without it PHPStan discovers the package's own phpstan.neon,
-      # which points at tests/ and can no longer resolve PHPUnit - turning the run into a
-      # configuration error while you are trying to read it as a dependency result.
+      # The supplement: it reads the code rather than collecting symbol names, so it says
+      # WHERE in src/ an undeclared class is reached and covers functions and constants
+      # alongside classes. It cannot see the transitive case at all, so it never replaces
+      # the check above.
+      #
+      # -c is not optional. Without it PHPStan discovers the package's own
+      # phpstan.neon.dist, which also analyses tests/ - and PHPUnit is gone now, so the
+      # run dies as a configuration error while you are trying to read it as a dependency
+      # result.
       - run: >
-          /tmp/phpstan/vendor/bin/phpstan analyse
-          -c .github/phpstan-nodev.neon
+          phpstan analyse -c .github/phpstan-nodev.neon
           --autoload-file=vendor/autoload.php --no-progress
 
   lint:
