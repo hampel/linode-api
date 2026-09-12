@@ -130,7 +130,9 @@ final class Connection
     }
 
     /**
-     * Linode answers a successful delete with `{}` and a 200, not a 204.
+     * Linode answers a successful delete with `{}` and a 200, not a 204 and not an empty body -
+     * measured on 2026-09-13 as `Content-Length: 2`. So a delete decodes like any other
+     * response, and an empty body on this path would be an error rather than a success.
      *
      * @param  array<string, scalar|null>  $query
      */
@@ -189,14 +191,30 @@ final class Connection
                 return new ApiResponse($decoded, $status, $meta);
             }
 
-            if ($status === 204 || trim($body) === '') {
+            // 204 IS THE ONLY SUCCESS WITH A LEGITIMATELY EMPTY BODY, and it is narrowed to
+            // exactly that rather than accepting any empty-bodied 2xx.
+            //
+            // The temptation is to treat an empty 200 as an empty answer too, and this did
+            // until it was measured. A successful DELETE looks like the case that needs it and
+            // is not: `DELETE domains/{id}/records/{id}` answers 200 with `Content-Length: 2`
+            // and a body of `{}` - measured against the live API on 2026-09-13 - which decodes
+            // above and never reaches here. `GET profile/grants` on an unrestricted user is
+            // the 204, and nothing else on this API is known to answer 2xx with nothing in it.
+            //
+            // What the wider version masked was a consumer's test rather than a real response.
+            // Laravel's `Http::fake()` with no arguments answers EVERY request with an empty
+            // 200, so a fake with a forgotten body read as "this account has no zones" and the
+            // assertions passed. That is the exact failure this whole branch exists to prevent,
+            // reached from the one direction nobody looks at. Reported by the first consumer.
+            if ($status === 204) {
                 return new ApiResponse([], $status, $meta);
             }
 
             // A 2xx that did not decode is not an empty answer, it is somebody else's
-            // answer - a maintenance page, a proxy error document, a truncated body. Read as
-            // [] it would reach the caller as "this account has no domains", which is the
-            // failure worth being loud about on an API used to manage DNS.
+            // answer - a maintenance page, a proxy error document, a truncated body, a test
+            // fake with no body. Read as [] it would reach the caller as "this account has no
+            // domains", which is the failure worth being loud about on an API used to manage
+            // DNS.
             $this->logger->error('Linode API answered success with a body that is not JSON', [
                 'method' => $request->getMethod(),
                 'uri' => (string) $request->getUri(),

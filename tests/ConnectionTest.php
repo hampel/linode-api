@@ -82,6 +82,68 @@ final class ConnectionTest extends TestCase
     }
 
     /**
+     * 204 is the ONLY success with a legitimately empty body, and the distinction is measured
+     * rather than assumed: a successful DELETE answers 200 with `Content-Length: 2` and a body
+     * of `{}`, read off the live API on 2026-09-13, so it decodes and never needs this path.
+     *
+     * An empty 200 therefore means something other than Linode answered - or, far more often,
+     * that a consumer's test fake has no body. Laravel's `Http::fake()` with no arguments
+     * answers every request with exactly this, which is why an earlier version of the check
+     * accepted any empty-bodied 2xx and let a forgotten fake read as "no zones on this
+     * account". The first consumer of this package found that, which is the one direction
+     * nobody was looking.
+     */
+    public function test_an_empty_bodied_200_raises_rather_than_reading_as_no_records(): void
+    {
+        $this->client->pushRaw(200, '');
+
+        try {
+            $this->connection()->get('domains');
+            $this->fail('an empty 200 did not raise');
+        } catch (MalformedResponseException $e) {
+            $this->assertStringContainsString('the body was empty', $e->getMessage());
+            $this->assertInstanceOf(ApiException::class, $e, 'an existing catch should see it');
+        }
+    }
+
+    /**
+     * The whole point of the narrowing, expressed the way a consumer meets it: the endpoint
+     * answers a list, the fake forgot to say so, and the client must not report an empty
+     * account.
+     */
+    public function test_a_fake_with_no_body_cannot_read_as_an_empty_collection(): void
+    {
+        $this->client->pushRaw(200, '');
+
+        $this->expectException(MalformedResponseException::class);
+
+        $this->linode()->domains()->all();
+    }
+
+    public function test_whitespace_alone_is_not_a_body_either(): void
+    {
+        $this->client->pushRaw(200, "\n  \n");
+
+        $this->expectException(MalformedResponseException::class);
+
+        $this->connection()->get('domains');
+    }
+
+    /**
+     * The measured shape of a real successful delete, which must keep working: two bytes that
+     * decode to an empty object, not an empty body.
+     */
+    public function test_the_measured_delete_response_is_still_a_success(): void
+    {
+        $this->client->pushRaw(200, '{}', ['Content-Type' => 'application/json']);
+
+        $response = $this->connection()->delete('domains/1234/records/5678');
+
+        $this->assertTrue($response->isEmpty());
+        $this->assertSame(200, $response->status);
+    }
+
+    /**
      * Each type sends whoever reads it somewhere different - a 401 to the credential, a 403
      * to the grants, a 404 to the id.
      */

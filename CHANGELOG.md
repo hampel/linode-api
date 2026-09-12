@@ -1,6 +1,12 @@
 CHANGELOG
 =========
 
+Unreleased
+----------
+
+* an empty-bodied `200` now raises `MalformedResponseException`. Only a `204` is treated as a
+  success with no body
+
 0.1.0 (2026-09-13)
 ------------------
 

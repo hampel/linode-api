@@ -123,7 +123,15 @@ read off the live API on 12 September 2026.
   reads an unqualified string in its own default timezone, so the same response is a
   different instant on a box set to Australia/Sydney. `Cast::datetime()` supplies UTC rather
   than inferring it, and leaves a value that does carry an offset alone.
-- **A successful DELETE is `{}` with a 200**, not a 204.
+- **A successful DELETE is `{}` with a 200** - `Content-Length: 2`, *measured* on 2026-09-13 -
+  not a 204 and not an empty body, so it decodes like anything else.
+- **204 IS THE ONLY SUCCESS WITH A LEGITIMATELY EMPTY BODY** - `GET profile/grants` on an
+  unrestricted user - so an empty-bodied 200 raises `MalformedResponseException`. The check
+  accepted any empty-bodied 2xx until the first consumer found what that masked: Laravel's
+  `Http::fake()` with no arguments answers every request with an empty 200, so a fake with a
+  forgotten body read as "this account has no zones" and the assertions passed. The DELETE
+  response looks like the case that needs the wider check and is not - which is why it was
+  measured rather than reasoned about.
 - **A zone's SOA and NS records are not records.** Linode generates and serves them without
   representing them in the record endpoint, so a healthy zone can answer with an empty list.
   `Domains::zoneFile()` is the whole picture.

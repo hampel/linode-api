@@ -17,6 +17,11 @@ use Psr\Http\Message\ResponseInterface;
  * "this account has no domains". Deleting records against that answer is the accident this
  * type exists to prevent.
  *
+ * IT ALSO CATCHES A TEST FAKE WITH NO BODY, which is the form most people will meet it in.
+ * Laravel's `Http::fake()` with no arguments answers every request with an empty 200, so a
+ * fake whose body was forgotten used to read as "this account has no zones" and let the
+ * assertions pass. Now it raises, and the message says the body was empty.
+ *
  * It extends ApiException so an existing `catch (ApiException)` sees it, even though
  * nothing was rejected.
  */

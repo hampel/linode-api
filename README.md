@@ -419,7 +419,12 @@ something should say so. The ones marked *measured* were read off the live API o
   `2018-01-01T00:01:01` — no `Z`, no offset. `new DateTimeImmutable()` on that reads it in
   PHP's own default timezone, so the same response is a different instant on a box set to
   Australia/Sydney, silently. This package supplies UTC rather than inferring it.
-- **A successful DELETE is `{}` with a 200**, not a 204.
+- **A successful DELETE is `{}` with a 200** — `Content-Length: 2`, *measured* — not a 204 and
+  not an empty body. So it decodes like any other response.
+- **A 204 is the only success with a legitimately empty body**, and that is `GET
+  /v4/profile/grants` on an unrestricted user. An empty-bodied **200** raises
+  `MalformedResponseException`, because on this API nothing legitimately answers one — see the
+  note under *Testing code that uses this*.
 - **`GET /v4/profile/grants` is a 204 for an unrestricted user** — see above; it is the trap
   in this API most likely to be read backwards.
 - **`GET /v4/profile` needs no scope**, which is what makes it the token check.
@@ -495,6 +500,12 @@ $linode = Client::withToken('test-token', new StubClient([
 Mocking `Client` or an endpoint class instead tests your own mock. A framework's HTTP facade
 fake will not see this traffic either, unless the framework's own client is what you injected —
 which is what the Laravel wrapper below is for.
+
+**Give every fake a body.** A 200 with an empty body raises `MalformedResponseException`
+rather than reading as an empty collection, and that is deliberate: Laravel's `Http::fake()`
+with no arguments answers every request with exactly that, so a fake whose body was forgotten
+would otherwise read as "this account has no zones" and let the assertions pass. The only
+success with a legitimately empty body is a 204.
 
 ## Laravel
 
