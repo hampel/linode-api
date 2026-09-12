@@ -1,8 +1,15 @@
 vendor/
 composer.lock
+composer.phar
 .idea/
-.phpunit.cache/
+.DS_Store
 .php-cs-fixer.cache
+
+# Both PHPUnit spellings. The directory is what PHPUnit 10 and later write and is the
+# only one this package's constraint can produce; the file is PHPUnit 9's, kept so a
+# checkout that ever runs an older PHPUnit does not leave it tracked.
+.phpunit.cache/
+.phpunit.result.cache
 
 # session notes and audit state - local to this clone, never published
 CLAUDE.local.md
