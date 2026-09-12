@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace Hampel\Linode\Api\Exception;
 
+use Hampel\Linode\Api\Result\ResponseMeta;
 use Psr\Http\Message\ResponseInterface;
 
 /**
@@ -40,7 +41,9 @@ final class MalformedResponseException extends ApiException
             ),
             $response->getStatusCode(),
             [],
-            $body
+            $body,
+            null,
+            ResponseMeta::fromResponse($response)
         );
     }
 }

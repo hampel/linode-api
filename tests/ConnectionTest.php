@@ -82,8 +82,8 @@ final class ConnectionTest extends TestCase
     }
 
     /**
-     * The status is what separates these, and each one sends a caller somewhere different -
-     * a 401 to the credential, a 403 to its scopes, a 404 to the id.
+     * Each type sends whoever reads it somewhere different - a 401 to the credential, a 403
+     * to the grants, a 404 to the id.
      */
     public function test_each_status_maps_to_the_type_that_says_what_to_do_about_it(): void
     {
@@ -107,6 +107,110 @@ final class ConnectionTest extends TestCase
                 $this->assertInstanceOf($expected, $e, sprintf('HTTP %d', $status));
                 $this->assertSame($status, $e->statusCode);
             }
+        }
+    }
+
+    /**
+     * THE ONE PLACE THE TYPE DOES NOT FOLLOW THE STATUS, and it is not a preference - both
+     * of these are 401 on the live API, measured on 12 September 2026 with a token holding
+     * `domains:read_write` and nothing else:
+     *
+     *   401  X-OAuth-Scopes: domains:read_write  "Your OAuth token is not authorized ..."
+     *   401  X-OAuth-Scopes: unknown             "Invalid Token"
+     *
+     * They need opposite responses - widen the token's scopes, against replace it - so
+     * collapsing both into one type would put the consumer back to matching on the reason
+     * string. Linode can only report a token's scopes for a token it recognises, so the
+     * header is the discriminator, and it is a fact rather than prose.
+     */
+    public function test_a_401_that_names_the_tokens_own_scopes_is_a_scope_failure_not_a_bad_token(): void
+    {
+        $this->client->pushJson(401, $this->errors([
+            ['reason' => 'Your OAuth token is not authorized to use this endpoint.'],
+        ]), [
+            'X-OAuth-Scopes' => 'domains:read_write',
+            'X-Accepted-OAuth-Scopes' => 'account:read_only',
+        ]);
+
+        try {
+            $this->connection()->get('account');
+            $this->fail('did not raise');
+        } catch (NotPermittedException $e) {
+            $this->assertSame(401, $e->statusCode, 'the status really is 401');
+            $this->assertTrue($e->isScopeFailure());
+            $this->assertSame('account:read_only', (string) $e->requiredScopes());
+            $this->assertSame('domains:read_write', (string) $e->heldScopes());
+
+            // The message has to say so, because the status contradicts it and the message is
+            // what most people read.
+            $this->assertStringContainsString('scope failure, despite the 401', $e->getMessage());
+            $this->assertStringContainsString('account:read_only', $e->getMessage());
+        }
+    }
+
+    public function test_a_401_with_unknown_scopes_is_a_bad_credential(): void
+    {
+        $this->client->pushJson(401, $this->errors([['reason' => 'Invalid Token']]), [
+            'X-OAuth-Scopes' => 'unknown',
+            'X-Accepted-OAuth-Scopes' => 'account:read_only',
+        ]);
+
+        try {
+            $this->connection()->get('account');
+            $this->fail('did not raise');
+        } catch (NotAuthenticatedException $e) {
+            $this->assertStringNotContainsString('scope failure', $e->getMessage());
+        }
+    }
+
+    /**
+     * A proxy that strips the header leaves nothing to discriminate on. Degrading to "your
+     * credential is wrong" is the conservative reading: it sends the operator to look at the
+     * token, which is where they would start anyway.
+     */
+    public function test_a_401_with_the_scope_header_stripped_degrades_to_a_bad_credential(): void
+    {
+        $this->client->pushJson(401, $this->errors([['reason' => 'Invalid Token']]));
+
+        $this->expectException(NotAuthenticatedException::class);
+        $this->connection()->get('account');
+    }
+
+    /**
+     * A restricted user refused an object they have no grant for is a genuine 403, and still
+     * reaches NotPermittedException - just not as a scope failure.
+     */
+    public function test_a_403_is_permission_but_not_a_scope_failure(): void
+    {
+        $this->client->pushJson(403, $this->errors([['reason' => 'Unauthorized']]), [
+            'X-OAuth-Scopes' => 'domains:read_write',
+            'X-Accepted-OAuth-Scopes' => 'domains:read_write',
+        ]);
+
+        try {
+            $this->connection()->get('domains/1');
+            $this->fail('did not raise');
+        } catch (NotPermittedException $e) {
+            $this->assertSame(403, $e->statusCode);
+            $this->assertFalse($e->isScopeFailure(), 'the token holds what the endpoint wanted');
+        }
+    }
+
+    public function test_the_response_metadata_reaches_the_exception(): void
+    {
+        $this->client->pushJson(429, $this->errors([['reason' => 'Too many requests']]), [
+            'X-RateLimit-Limit' => '1840',
+            'X-RateLimit-Remaining' => '0',
+            'Retry-After' => '60',
+        ]);
+
+        try {
+            $this->connection()->get('domains');
+            $this->fail('did not raise');
+        } catch (TooManyRequestsException $e) {
+            $this->assertSame(0, $e->meta->rateLimitRemaining);
+            $this->assertSame(1840, $e->meta->rateLimit);
+            $this->assertSame(60, $e->retryAfter);
         }
     }
 

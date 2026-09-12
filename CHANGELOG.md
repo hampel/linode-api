@@ -58,8 +58,17 @@ Initial build. Nothing is released, so everything here is the first version of i
 Read off `api.linode.com` with unauthenticated requests, and each one is now either asserted
 in `tests/` or printed by a harness exercise:
 
-* `Retry-After: 60` is sent on **every** response, including a 200 beside
-  `X-RateLimit-Remaining: 1839`. It is not evidence of being throttled; only a 429 is
+* **an insufficient OAuth scope is a 401, not a 403** — the same status as a bad credential,
+  and the opposite fix. `X-OAuth-Scopes` tells them apart, because Linode reports a token's
+  own scopes only for a token it recognises: a 401 naming them is a scope failure, a 401
+  saying `unknown` is a bad credential. `NotPermittedException` is therefore raised for both
+  that 401 and a 403, and carries `isScopeFailure()`, `requiredScopes()` and `heldScopes()`.
+  This is the one place the exception type does not follow the status, and the message says
+  so, because the status contradicts it
+* a `Retry-After` is sent on **every** response, including a 200 beside
+  `X-RateLimit-Remaining: 1839` — 60 on a fresh window and 46 later in the same one, so it
+  counts down to the reset rather than being fixed. It is not evidence of being throttled;
+  only a 429 is
 * a missing `Authorization` header and a made-up bearer token produce byte-identical
   `401 {"errors":[{"reason":"Invalid Token"}]}` replies
 * `?page_size=1` is `400 {"field":"page_size","reason":"Must be 25-500"}`
@@ -73,12 +82,24 @@ The specification this package was written against is
 [linode/linode-api-docs](https://github.com/linode/linode-api-docs) `openapi.json` on the
 `development` branch, version 4.215.0.
 
-### Not yet measured
+### Confirmed against a real account, same day
 
-* **the separator between multiple scopes in `X-OAuth-Scopes`.** An unauthenticated request
-  reports `unknown`, and no token was available when this was written, so `Result\Scopes`
-  splits on commas, whitespace or both. The `verify` exercise prints the raw header, and the
-  first run against a real token settles it
+All four read-only exercises green with a `domains:read_write` token. `verify` is what found
+the 401-for-scope behaviour above, on its first run, against a package that had taken 403 from
+the specification — the suite was green the whole time, because the stub agreed with the code.
+
+* the token check, the grants 204 for an unrestricted user, and the account refusal all
+  behave as documented
+* every status in `errors` mapped to the type the hierarchy claims
+* the domain filter is honoured — 170 zones unfiltered against 0 for a name that cannot
+  exist — and an account that size walks two pages, so the lazy page walk is exercised across
+  a real boundary
+
+### Still not measured
+
+* **the separator between multiple scopes in `X-OAuth-Scopes`.** The token it was run with
+  holds one scope, so no separator was observable and `Result\Scopes` still splits on commas,
+  whitespace or both. A multi-scope token settles it; `verify` prints the raw header
 * every write path. The suite drives them through a stubbed PSR-18 client, which by
   construction agrees with whatever the package believes; only the `records` exercise can
-  contradict it
+  contradict it, and it has not been run

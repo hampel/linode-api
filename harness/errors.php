@@ -26,6 +26,7 @@ use Hampel\Linode\Api\Config;
 use Hampel\Linode\Api\Exception\ApiException;
 use Hampel\Linode\Api\Exception\NotAuthenticatedException;
 use Hampel\Linode\Api\Exception\NotFoundException;
+use Hampel\Linode\Api\Exception\NotPermittedException;
 use Hampel\Linode\Api\Exception\ValidationException;
 
 require __DIR__ . '/lib/client.php';
@@ -51,6 +52,17 @@ $expect = function (string $what, string $expected, callable $probe) use ($io): 
         foreach ($e->errors as $error) {
             $io->line(sprintf('      %s', $error->describe()));
         }
+
+        // Where the status and the meaning disagree, print both scope headers - they are the
+        // evidence for routing this to NotPermittedException despite the 401.
+        if ($e instanceof NotPermittedException) {
+            $io->line(sprintf(
+                '      scope failure: %s | holds [%s] wants [%s]',
+                $e->isScopeFailure() ? 'yes' : 'no',
+                (string) $e->heldScopes(),
+                (string) $e->requiredScopes()
+            ));
+        }
     }
 };
 
@@ -70,6 +82,18 @@ $expect('page_size below the minimum', ValidationException::class, static fn () 
 $expect('an X-Filter that is not JSON', ValidationException::class, static fn () => $linode->connection()->send(
     $linode->connection()->request('GET', 'domains')->withHeader('X-Filter', 'not json')
 ));
+
+// The one that matters most, and the one this package originally had wrong: an insufficient
+// scope answers 401, not 403 - the same status as a bad credential, needing the opposite fix.
+// This probe only means something with a token that lacks account:read_only, so it is skipped
+// rather than failed when the token happens to have it.
+$status = $linode->verify();
+
+if ($status->allows('account:read_only')) {
+    $io->line('  a scope this token does not have    skipped - this token can read the account');
+} else {
+    $expect('a scope this token does not have', NotPermittedException::class, static fn () => $linode->account()->get());
+}
 
 // 404: a zone id that will not exist.
 $expect('a zone id that is not there', NotFoundException::class, static fn () => $linode->domains()->get(999999999));

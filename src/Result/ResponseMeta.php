@@ -28,8 +28,10 @@ final class ResponseMeta implements \JsonSerializable
         /** A unix timestamp, not a duration. */
         public readonly ?int $rateLimitReset,
         /**
-         * Present on EVERY response, including a 200 - measured, not assumed. It is
-         * meaningful only alongside a 429; on its own it says nothing.
+         * Present on EVERY response, including a 200 - measured, not assumed, and it varies:
+         * 60 on a fresh window and 46 later in the same one, so it counts down to the reset
+         * rather than being a fixed figure. Meaningful only alongside a 429; on its own it
+         * says nothing.
          *
          * @see \Hampel\Linode\Api\Exception\ApiException
          */
@@ -46,6 +48,19 @@ final class ResponseMeta implements \JsonSerializable
          */
         public readonly ?string $specVersion,
     ) {
+    }
+
+    /**
+     * No metadata at all - for an exception built by hand rather than from a response.
+     *
+     * Every field reads as "not known" rather than as a value: the rate limit is null, and
+     * the scopes report themselves unknown, which is the state that means "the question was
+     * not answered" and not "no permissions". That distinction matters here more than
+     * anywhere, because this is the value a caller gets when there was no response to read.
+     */
+    public static function none(): self
+    {
+        return new self(null, null, null, null, Scopes::fromHeader(''), Scopes::fromHeader(''), null);
     }
 
     public static function fromResponse(ResponseInterface $response): self

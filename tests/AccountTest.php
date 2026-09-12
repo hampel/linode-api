@@ -72,27 +72,76 @@ final class AccountTest extends TestCase
     }
 
     /**
-     * A DNS token will not usually carry account:read_only, and that refusal is correct
-     * rather than something to work around.
+     * The exact refusal the live API gives a DNS-only token, measured on 12 September 2026:
+     * a 401 - not the 403 the situation would suggest - carrying the token's own scopes and
+     * the ones the endpoint wanted.
+     *
+     * @return array<string, string>
      */
-    public function test_a_token_without_the_account_scope_raises_from_get(): void
+    private function refusedHeaders(): array
     {
-        $this->client->pushJson(403, $this->errors([['reason' => 'Your OAuth token is not authorized to use this endpoint.']]));
+        return [
+            'X-OAuth-Scopes' => 'domains:read_write',
+            'X-Accepted-OAuth-Scopes' => 'account:read_only',
+        ];
+    }
 
-        $this->expectException(NotPermittedException::class);
-        $this->linode()->account()->get();
+    /**
+     * A DNS token will not usually carry account:read_only, and that refusal is correct
+     * rather than something to work around. It arrives as a 401 and still has to reach
+     * NotPermittedException, or a caller learns the wrong thing from it.
+     */
+    public function test_a_token_without_the_account_scope_raises_permission_despite_the_401(): void
+    {
+        $this->client->pushJson(401, $this->errors([
+            ['reason' => 'Your OAuth token is not authorized to use this endpoint.'],
+        ]), $this->refusedHeaders());
+
+        try {
+            $this->linode()->account()->get();
+            $this->fail('did not raise');
+        } catch (NotPermittedException $e) {
+            $this->assertSame(401, $e->statusCode);
+            $this->assertTrue($e->isScopeFailure());
+            $this->assertSame('account:read_only', (string) $e->requiredScopes());
+        }
     }
 
     public function test_find_absorbs_that_refusal_for_a_diagnostic_that_reports_what_it_can(): void
     {
-        $this->client->pushJson(403, $this->errors([['reason' => 'Your OAuth token is not authorized to use this endpoint.']]));
+        $this->client->pushJson(401, $this->errors([
+            ['reason' => 'Your OAuth token is not authorized to use this endpoint.'],
+        ]), $this->refusedHeaders());
 
         $this->assertNull($this->linode()->account()->find());
     }
 
+    public function test_find_logs_the_scope_gap_it_absorbed(): void
+    {
+        $logger = new RecordingLogger();
+        $this->client->pushJson(401, $this->errors([
+            ['reason' => 'Your OAuth token is not authorized to use this endpoint.'],
+        ]), $this->refusedHeaders());
+
+        $this->linode(logger: $logger)->account()->find();
+
+        $context = $logger->contextFor('Linode account is not readable by this token');
+
+        $this->assertNotNull($context);
+        $this->assertSame('account:read_only', $context['required']);
+        $this->assertSame('domains:read_write', $context['held']);
+    }
+
+    /**
+     * The distinction the whole 401 split exists for: find() reports "you may not read this"
+     * as null, and must NOT swallow "your credential is no good" the same way - they are the
+     * same status, and only one of them means the rest of the run is worth continuing.
+     */
     public function test_find_does_not_absorb_a_bad_token(): void
     {
-        $this->client->pushJson(401, $this->errors([['reason' => 'Invalid Token']]));
+        $this->client->pushJson(401, $this->errors([['reason' => 'Invalid Token']]), [
+            'X-OAuth-Scopes' => 'unknown',
+        ]);
 
         $this->expectException(NotAuthenticatedException::class);
         $this->linode()->account()->find();

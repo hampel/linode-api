@@ -313,8 +313,8 @@ consumer catches what it can act on instead of matching on a message:
 | exception | status | what it means |
 |---|---|---|
 | `ValidationException` | 400 | a value was rejected. `fieldErrors()` is the shape a form wants |
-| `NotAuthenticatedException` | 401 | the token is missing, wrong, expired or revoked |
-| `NotPermittedException` | 403 | the token is real and lacks the scope, or the user lacks the grant |
+| `NotAuthenticatedException` | 401 | the credential is no good — missing, wrong, expired, revoked |
+| `NotPermittedException` | **401** or 403 | the token is real and lacks the scope, or the user lacks the grant |
 | `NotFoundException` | 404 | no such record — or no such path; Linode does not distinguish |
 | `TooManyRequestsException` | 429 | rate limited, and the only thing that means so |
 | `ServerException` | 5xx | Linode failed; a retry is reasonable |
@@ -335,6 +335,39 @@ try {
 }
 ```
 
+### A scope failure is a 401, not a 403
+
+This is the one place the exception type deliberately does not follow the status, and it is
+not a preference. Measured on 12 September 2026 with a token holding `domains:read_write` and
+nothing else:
+
+```
+401  X-OAuth-Scopes: domains:read_write      "Your OAuth token is not authorized
+     X-Accepted-OAuth-Scopes: account:read_only     to use this endpoint."
+
+401  X-OAuth-Scopes: unknown                 "Invalid Token"
+```
+
+Same status; opposite fixes. The first says *widen the token's scopes*, the second says
+*replace the credential*. Collapsing them into one type would leave you matching on the reason
+string, which is what this hierarchy exists to prevent.
+
+**`X-OAuth-Scopes` separates them on a fact rather than on prose:** Linode can only report a
+token's scopes for a token it recognises. So a 401 naming them becomes `NotPermittedException`
+and a 401 saying `unknown` becomes `NotAuthenticatedException`. A stripped header degrades to
+the second, which is the conservative reading.
+
+```php
+catch (NotPermittedException $e) {
+    $e->isScopeFailure();      // true: the token's scopes; false: a restricted user's grants
+    $e->requiredScopes();      // account:read_only  - what the endpoint wanted
+    $e->heldScopes();          // domains:read_write - what the token has
+}
+```
+
+The message says so too, because the status contradicts it and the message is what most
+people read.
+
 **`MalformedResponseException` is the one worth understanding.** A maintenance page, a proxy's
 error document and a truncated body are all a 200 with something other than JSON in it.
 Decoded permissively they become an empty array, which reaches the caller as *this account has
@@ -347,10 +380,13 @@ Each of these is asserted in `tests/` or exercised in `harness/`, so if one stop
 something should say so. The ones marked *measured* were read off the live API on 12 September
 2026.
 
-- **`Retry-After: 60` is on every response, including a 200** — *measured*, beside
-  `X-RateLimit-Remaining: 1839` on a successful request. Its presence says nothing about
-  whether you were throttled; a client that backed off on seeing one would sleep after every
-  call. Only `TooManyRequestsException` means you were throttled.
+- **A `Retry-After` is on every response, including a 200** — *measured*: 60 beside
+  `X-RateLimit-Remaining: 1839` on a fresh window, 46 on a later successful call, so it counts
+  down to the reset rather than being fixed. Its presence says nothing about whether you were
+  throttled; a client that backed off on seeing one would sleep after every call. Only
+  `TooManyRequestsException` means you were throttled.
+- **An insufficient scope is a 401, not a 403** — *measured*; see above. `X-OAuth-Scopes` is
+  what tells it apart from a bad credential.
 - **The rate limit is reported on every response** as `X-RateLimit-Limit`,
   `X-RateLimit-Remaining` and `X-RateLimit-Reset` (a unix timestamp, not a duration).
   `$response->meta` carries them, so an integration walking a large account can slow itself
@@ -361,7 +397,7 @@ something should say so. The ones marked *measured* were read off the live API o
   before concluding that an endpoint does not exist.
 - **A missing token and a made-up one are indistinguishable.** Both answer
   `401 {"errors": [{"reason": "Invalid Token"}]}`, byte for byte — *measured*. Nothing in the
-  reply says which of the four causes it was.
+  reply says which of the four causes it was, so no message here pretends to know.
 - **`page_size` below 25 is a 400**, `{"field": "page_size", "reason": "Must be 25-500"}` —
   *measured*.
 - **An `X-Filter` that is not JSON is a 400** naming `X-Filter` — *measured*. A filter naming

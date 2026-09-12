@@ -55,9 +55,18 @@ step.
 Each is asserted in `tests/` or printed by a harness exercise. Those marked *measured* were
 read off the live API on 12 September 2026.
 
-- **`Retry-After: 60` is on every response, including a 200** — *measured*, beside
-  `X-RateLimit-Remaining: 1839`. Its presence is not a throttle signal, and a client that
-  backed off on seeing one would sleep after every successful call. Only a 429 means it.
+- **AN INSUFFICIENT SCOPE IS A 401, NOT A 403** — *measured* with a token holding
+  `domains:read_write` and nothing else. The same status as a bad credential, and the
+  opposite fix. `X-OAuth-Scopes` discriminates: Linode reports a token's own scopes only for
+  a token it recognises, so a 401 naming them is a scope failure and a 401 saying `unknown`
+  is a bad credential. `ApiException::fromResponse()` routes on that, which is the one place
+  in this package where the exception type deliberately does not follow the status. It was
+  written the other way round first, from the specification, and the `verify` exercise found
+  it on its first run.
+- **A `Retry-After` is on every response, including a 200** — *measured*: 60 on a fresh
+  window and 46 later in the same one, so it counts down to the reset rather than being
+  fixed. Its presence is not a throttle signal, and a client that backed off on seeing one
+  would sleep after every successful call. Only a 429 means it.
 - **`GET /v4/profile` needs no OAuth scope**, which is what makes it the token check. Every
   other endpoint conflates "your token is wrong" with "your token may not do this".
 - **`GET /v4/profile/grants` answers 204 for an UNRESTRICTED user.** Decoded as an ordinary
@@ -127,6 +136,25 @@ run — never in `.env`, because a persisted authorisation is one nobody gave. S
 
 **If an exercise fails for want of a credential, that is the guard working.** The rig does not
 load `.env` in an agent session. Do not go looking for the token.
+
+## What the live runs settled, 12 September 2026
+
+Against a real account with a `domains:read_write` token, all four read-only exercises green:
+
+- `verify` — the token check works end to end, and **found the 401-for-scope behaviour above
+  on its first run**, where the package had assumed 403 from the specification. That is the
+  case for the harness in one line: the suite was green throughout, because the stub agreed
+  with the code.
+- `X-OAuth-Scopes` carries **one scope per token here and no separator was observable**, so
+  `Result\Scopes` still splits on commas and whitespace. Not yet settled; a multi-scope token
+  would settle it.
+- `errors` — every status maps to the type the hierarchy claims: 401 Invalid Token, 400
+  page_size, 400 X-Filter, 404 for both a missing record and a missing path.
+- `filtering` — 170 zones unfiltered against 0 for a name that cannot exist, so the filter is
+  honoured. That account size also walks two pages, so `apiEach()` is exercised across a real
+  page boundary.
+- `domains` — 170 zones read and parsed, every one master/active.
+- `records` has still never been run. Every write path remains unverified.
 
 ## What the suite cannot tell you
 
