@@ -203,4 +203,29 @@ harness is the only instrument that can see that, which is the whole argument fo
 assertion-free and run by a person.
 
 Two things in particular are still unverified against a live account, and both are noted in
-the CHANGELOG: the separator in the `X-OAuth-Scopes` header, and every write path.
+the CHANGELOG: the separator in the `X-OAuth-Scopes` header, and what a record's `ttl_sec` of
+0 inherits.
+
+### A test that pins one outcome of a branch says nothing about the others
+
+`Connection::send()` has three outcomes for a 2xx - decoded, legitimately empty, somebody
+else's answer - and for a while the suite had a test for only the middle one,
+`test_a_204_with_no_body_is_a_success`. That reads as coverage of the branch and is coverage of
+one arm of it.
+
+Measured on 2026-09-13 rather than reasoned about, by putting the WRONG narrowing in
+deliberately - `if (trim($body) === '')` where the correct form is `if ($status === 204)` - and
+running both suites against it:
+
+| suite | result |
+|---|---|
+| as it was, with the single 204 test | 188 green |
+| with the four empty-200 tests added | 3 failures, naming the behaviour |
+
+So the old suite could not distinguish the right narrowing from the wrong one, and would have
+been green either way. **It was not the behaviour that was untested, it was the question.**
+Worth repeating the deliberate-wrong-answer check on any branch here whose arms are a success
+and a raise, because a green suite over one arm is the shape that hides it.
+
+Restoring afterwards is `git checkout -- <files>` on a clean tree, which is why the tree should
+be committed before a probe like this rather than after.
