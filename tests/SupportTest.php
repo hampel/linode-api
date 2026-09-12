@@ -118,14 +118,50 @@ final class SupportTest extends BaseTestCase
     }
 
     /**
-     * A record's zero cannot be resolved from the record: Linode does not document whose
-     * default it is, and if it inherits the zone's the record does not know the zone.
-     * Returning 86400 there was a guess, and the guesses in this area have not been good.
+     * A record's zero inherits the ZONE's TTL - measured on 2026-09-13 by moving a live zone
+     * from 3600 to 7200 and watching its `ttl_sec: 0` records follow, read off the
+     * authoritative nameserver. A fixed 86400 would not have moved.
      */
-    public function test_a_records_zero_ttl_is_null_because_it_is_not_knowable_from_here(): void
+    public function test_a_records_zero_ttl_inherits_the_zone(): void
+    {
+        $record = DomainRecord::a('www', '203.0.113.1')->withTtl(0);
+        $zone = Domain::master('example.com', 'h@example.com')->withTtl(3600);
+
+        $this->assertSame(3600, $record->effectiveTtl($zone));
+        $this->assertSame(7200, $record->effectiveTtl(7200), 'the zone ttl_sec on its own will do');
+    }
+
+    /**
+     * A zone whose own ttl_sec is 0 falls back to 86400 - also measured, and the one claim in
+     * this area the documentation got right. So a record inheriting from such a zone gets it.
+     */
+    public function test_a_record_inheriting_from_a_zone_that_is_itself_defaulted(): void
+    {
+        $record = DomainRecord::a('www', '203.0.113.1')->withTtl(0);
+
+        $this->assertSame(86400, $record->effectiveTtl(Domain::master('a.example', 'h@a.example')));
+        $this->assertSame(86400, $record->effectiveTtl(0));
+    }
+
+    /**
+     * Without the zone it is still null, because the record genuinely does not know. Unchanged
+     * from before the inheritance was measured, so an existing call behaves as it did.
+     */
+    public function test_a_records_zero_ttl_is_null_when_the_zone_is_not_supplied(): void
     {
         $this->assertNull(DomainRecord::a('www', '203.0.113.1')->withTtl(0)->effectiveTtl());
         $this->assertNull(DomainRecord::a('www', '203.0.113.1')->effectiveTtl());
+    }
+
+    /**
+     * A record with its own TTL ignores the zone entirely.
+     */
+    public function test_an_explicit_record_ttl_is_not_inherited_from(): void
+    {
+        $record = DomainRecord::a('www', '203.0.113.1')->withTtl(300);
+
+        $this->assertSame(300, $record->effectiveTtl());
+        $this->assertSame(300, $record->effectiveTtl(Domain::master('a.example', 'h@a.example')->withTtl(7200)));
     }
 
     /**

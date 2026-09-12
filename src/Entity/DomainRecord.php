@@ -332,19 +332,39 @@ final class DomainRecord implements \JsonSerializable
     }
 
     /**
-     * The TTL that will actually be stored, with Linode's silent rounding up applied.
+     * The TTL resolvers will actually be given, with Linode's silent rounding up applied.
      *
-     * NULL WHEN THE TTL IS 0, and that is the honest answer rather than a missing feature. On
-     * a record, 0 means "the default" and Linode's documentation does not say whose - the
-     * fixed 86400 a zone's ttl_sec falls back to, or the zone's own TTL. Those differ by any
-     * factor the zone likes, and a record does not know which zone it is in, so this cannot
-     * answer it from here whichever turns out to be true.
+     * A RECORD'S `ttl_sec` OF 0 INHERITS THE ZONE'S TTL - measured on 2026-09-13, and not
+     * something Linode's documentation says. The zone was moved from 3600 to 7200 and its
+     * `ttl_sec: 0` records followed within 30 seconds, read off the authoritative nameserver.
+     * The alternative - a fixed 86400, which is what a ZONE's own zero falls back to - is
+     * ruled out by that: it would not have moved.
+     *
+     * So a record cannot answer this alone, and the zone is the argument:
+     *
+     *     $record->effectiveTtl($zone);        // 3600, inherited
+     *     $record->withTtl(300)->effectiveTtl($zone);   // 300, its own
+     *
+     * Null without one, rather than a guess. That is unchanged from when the inheritance was
+     * unknown, so a call that passes nothing behaves as it did.
+     *
+     * @param  Domain|int|null  $zone  the zone this record lives in, or its `ttl_sec`
      */
-    public function effectiveTtl(): ?int
+    public function effectiveTtl(Domain|int|null $zone = null): ?int
     {
         $ttl = $this->ttlSec ?? 0;
 
-        return $ttl > 0 ? Ttl::round($ttl) : null;
+        if ($ttl > 0) {
+            return Ttl::round($ttl);
+        }
+
+        if ($zone === null) {
+            return null;
+        }
+
+        // A zone's own zero is the documented 86400 - measured the same day, and this is the
+        // one claim in this area the documentation got right.
+        return Ttl::effective('ttl_sec', $zone instanceof Domain ? ($zone->ttlSec ?? 0) : $zone);
     }
 
     /**

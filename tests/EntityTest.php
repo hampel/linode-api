@@ -145,6 +145,7 @@ final class EntityTest extends BaseTestCase
         $this->assertSame(120, DomainRecord::a('www', '203.0.113.1')->withTtl(60)->effectiveTtl());
         $this->assertSame(3600, DomainRecord::a('www', '203.0.113.1')->withTtl(900)->effectiveTtl());
         $this->assertNull(DomainRecord::a('www', '203.0.113.1')->withTtl(0)->effectiveTtl());
+        $this->assertSame(3600, DomainRecord::a('www', '203.0.113.1')->withTtl(0)->effectiveTtl(3600));
     }
 
     public function test_every_record_type_has_a_constructor_that_takes_what_it_needs(): void

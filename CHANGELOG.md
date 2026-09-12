@@ -1,6 +1,13 @@
 CHANGELOG
 =========
 
+0.3.0 (2026-09-13)
+------------------
+
+* `DomainRecord::effectiveTtl()` takes the zone, as a `Domain` or a `ttl_sec`, and resolves a
+  record `ttl_sec` of `0` to the zone's TTL. A record's zero inherits the zone rather than
+  falling back to a fixed default; without a zone it still answers `null`
+
 0.2.1 (2026-09-13)
 ------------------
 

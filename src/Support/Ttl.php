@@ -35,10 +35,17 @@ namespace Hampel\Linode\Api\Support;
  *     Ttl::round(60);        // 120
  *     Ttl::isValid(300);     // true
  *
- * ZERO IS NOT "NO CACHING". On a zone it means "use the default", and the default differs per
- * field: 86400 for ttl_sec, 14400 for refresh_sec and retry_sec, 1209600 for expire_sec. It
- * is also what every one of them reports until it has been set. On a RECORD, what zero
- * inherits has not been measured - see DomainRecord::effectiveTtl().
+ * ZERO IS NOT "NO CACHING", AND IT MEANS DIFFERENT THINGS ON A ZONE AND ON A RECORD. Both were
+ * measured on 2026-09-13 off the authoritative nameserver:
+ *
+ *   - on a ZONE it is "use the default", which differs per field: 86400 for ttl_sec, 14400 for
+ *     refresh_sec and retry_sec, 1209600 for expire_sec. Measured for ttl_sec, and the
+ *     documentation is right about it.
+ *   - on a RECORD it INHERITS THE ZONE'S TTL, which the documentation does not say. Moving a
+ *     zone from 3600 to 7200 moved its `ttl_sec: 0` records with it inside 30 seconds; a fixed
+ *     default would not have moved. See DomainRecord::effectiveTtl(), which takes the zone.
+ *
+ * Zero is also what every one of these reports until it has been set.
  */
 final class Ttl
 {

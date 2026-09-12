@@ -238,61 +238,60 @@ try {
 
     $io->line();
 
-    // WHAT DOES ttl_sec: 0 ON A RECORD INHERIT? The specification says 0 is "the default" and
-    // does not say whose. Two candidates, and here they differ by a large factor: the fixed
-    // 86400 a ZONE's ttl_sec falls back to, or the zone's own TTL.
+    // A RECORD'S ttl_sec OF 0 INHERITS THE ZONE'S TTL. Settled on 2026-09-13 by moving a live
+    // zone from 3600 to 7200 and watching its zero-TTL records follow within 30 seconds, read
+    // off the authoritative nameserver; a fixed 86400 would not have moved. This is the
+    // regression check for that, and it is cheap because it asks DNS rather than the API.
     //
-    // The record endpoint reports the stored 0 either way, so only the rendered zone file can
-    // answer it - which is why this waits twice. It runs BEFORE the zone-TTL probe below, so
-    // the zone is still at its own setting and the two candidates stay distinguishable.
+    // THE ZONE FILE IS THE WRONG INSTRUMENT FOR ANYTHING SERVED. It is regenerated
+    // asynchronously and was measured lagging by minutes - once still stale after 160 seconds -
+    // where dig against ns1 reflected the same change in 30. An earlier version of this probe
+    // waited on the zone file and reported itself inconclusive on every run.
+    $records->update((int) $probe->id, ['ttl_sec' => 0]);
     $zoneTtlNow = $linode->domains()->get((int) $zone->id)->ttlSec ?? 0;
+    $expected = Ttl::effective('ttl_sec', $zoneTtlNow);
 
     $io->success('What a record ttl_sec of 0 inherits:');
     $io->values([
         "the zone's own ttl_sec" => (string) $zoneTtlNow,
-        'the fixed zone default' => (string) Ttl::DEFAULT_TTL,
+        'so the record should serve' => (string) $expected,
+        'if it were a fixed default instead' => (string) Ttl::DEFAULT_TTL,
     ]);
 
-    // Settle on a distinctive value first and watch it render, so the next wait has something
-    // definite to differ from.
-    $marker = 7200;
-    $records->update((int) $probe->id, ['ttl_sec' => $marker]);
-
-    [$seen, $waitedFirst] = $waitFor(
-        static fn (): ?int => $renderedTtl(static fn (): array => $linode->domains()->zoneFile((int) $zone->id)),
-        null
-    );
-
-    if ($seen !== $marker) {
-        $io->warn(sprintf(
-            '? the zone file rendered %s after %ds, not the %d just written - inconclusive, and'
-                . ' not a finding about the API.',
-            $seen === null ? 'nothing' : (string) $seen,
-            $waitedFirst,
-            $marker
-        ));
+    if (trim((string) shell_exec('command -v dig')) === '') {
+        $io->warn('? dig is not installed, so this cannot be checked. Not a finding about the API.');
     } else {
-        $records->update((int) $probe->id, ['ttl_sec' => 0]);
+        $fqdn = $probe->fqdn($zone->domain);
+        $served = null;
+        $waited = 0;
 
-        [$rendered, $waited] = $waitFor(
-            static fn (): ?int => $renderedTtl(static fn (): array => $linode->domains()->zoneFile((int) $zone->id)),
-            $marker
-        );
+        while ($waited <= 180) {
+            $out = [];
+            exec(sprintf('dig +tries=1 +time=3 @ns1.linode.com %s TXT +noall +answer 2>/dev/null',
+                escapeshellarg($fqdn)), $out);
 
-        if ($rendered === null) {
-            $io->warn(sprintf('? the zone file had not moved off %d after %ds - inconclusive.', $marker, $waited));
+            foreach ($out as $line) {
+                if (preg_match('/^\S+\s+(\d+)\s+IN\s+TXT\s/', $line, $m) === 1) {
+                    $served = (int) $m[1];
+                    break 2;
+                }
+            }
+
+            sleep(10);
+            $waited += 10;
+        }
+
+        if ($served === null) {
+            $io->warn(sprintf('? the nameserver was not serving %s after %ds - inconclusive.', $fqdn, $waited));
         } else {
-            $io->values([
-                'rendered with ttl_sec 0' => (string) $rendered,
-                'after waiting' => $waitedFirst . 's then ' . $waited . 's',
-            ]);
+            $io->values(['served TTL (dig @ns1)' => (string) $served, 'after' => $waited . 's']);
 
-            if ($rendered === $zoneTtlNow) {
-                $io->success("✓ a record ttl_sec of 0 INHERITS THE ZONE's TTL");
-            } elseif ($rendered === Ttl::DEFAULT_TTL) {
-                $io->success('✓ a record ttl_sec of 0 is the fixed 86400, independent of the zone');
+            if ($served === $expected) {
+                $io->success("✓ a record ttl_sec of 0 still inherits the zone's TTL");
+            } elseif ($served === Ttl::DEFAULT_TTL && $expected !== Ttl::DEFAULT_TTL) {
+                $io->error('✗ it served the fixed default, not the zone - the inheritance rule has changed.');
             } else {
-                $io->warn('? neither candidate - the rendered value matches nothing expected');
+                $io->warn(sprintf('? served %d, expected %d - neither rule explains it.', $served, $expected));
             }
         }
     }

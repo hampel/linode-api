@@ -105,8 +105,15 @@ read off the live API on 12 September 2026.
   The zone rule was measured in the same run and does match its documentation. `Support\Ttl`
   carried the two-rule model until the harness contradicted it; `SupportTest::ttlCases()`
   pins the table so prose cannot drift back in. Zero on a ZONE means "use the default", which
-  differs per field. Zero on a RECORD is undocumented and `DomainRecord::effectiveTtl()`
-  returns null for it rather than guessing again.
+  differs per field - 86400 for `ttl_sec`, measured, and the documentation is right. Zero on a
+  RECORD **inherits the zone's TTL**, which the documentation does not say: moving a live zone
+  from 3600 to 7200 moved its `ttl_sec: 0` records inside 30 seconds, read off the
+  authoritative nameserver. `DomainRecord::effectiveTtl()` takes the zone to resolve it, and
+  still answers null without one.
+- **`dig` against `ns1.linode.com` is a far better instrument than the zone-file endpoint.**
+  DNS reflected a zone TTL change in 30 seconds where the rendered zone file took minutes and
+  once had not caught up after 160. For anything about what is actually SERVED, query the
+  nameserver; the zone file is for what the records add up to.
 - **The zone file lags the record endpoints, by MINUTES** - *measured*: straight after a
   write it rendered a TTL two edits old and a record that had already been deleted, and on
   another run a change had still not appeared after 160 seconds. It is authoritative about
@@ -230,9 +237,8 @@ does: when the API changes, both stay agreed with each other and disagreed with 
 harness is the only instrument that can see that, which is the whole argument for it being
 assertion-free and run by a person.
 
-Two things in particular are still unverified against a live account, and both are noted in
-the CHANGELOG: the separator in the `X-OAuth-Scopes` header, and what a record's `ttl_sec` of
-0 inherits.
+Two things are still unverified against a live account, and both are noted in the CHANGELOG:
+the separator in the `X-OAuth-Scopes` header, and a restricted user's grants.
 
 ### A test that pins one outcome of a branch says nothing about the others
 

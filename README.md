@@ -262,11 +262,21 @@ Domain::master(...)->withTtl(900)->effectiveTtl();     // 3600
 DomainRecord::a('www', '203.0.113.1')->withTtl(900)->effectiveTtl();   // 3600
 ```
 
-**Zero is not "no caching".** On a *zone* it means "use the default", and the default differs
-per field: 86400 for a TTL, 14400 for refresh and retry, 1209600 for expire. It is also what
-every one of them reports until it has been set. On a *record*, `effectiveTtl()` returns
-**null** for zero — Linode does not document whose default it is, and if it inherits the
-zone's then a record cannot answer it alone.
+**Zero is not "no caching", and it means different things on a zone and on a record.** Both
+were *measured* off the authoritative nameserver:
+
+- On a **zone** it means "use the default", which differs per field: 86400 for a TTL, 14400 for
+  refresh and retry, 1209600 for expire.
+- On a **record** it **inherits the zone's TTL** — which Linode does not document. So
+  `effectiveTtl()` takes the zone to resolve it, and answers `null` without one rather than
+  guessing:
+
+```php
+$record->effectiveTtl($zone);     // 3600, inherited from the zone
+$record->effectiveTtl();          // null - a record does not know its zone
+```
+
+Zero is also what every one of these reports until it has been set.
 
 ## Filtering and sorting
 
@@ -528,12 +538,9 @@ made an empty-bodied `200` raise rather than resolve to an empty response. Compo
 pins to the minor below 1.0, so `^0.2` is `>=0.2.0 <0.3.0` and the next minor will not arrive
 unasked. Read the CHANGELOG before widening it.
 
-Three questions about Linode's own behaviour are still open, and two of them could move a
+Two questions about Linode's own behaviour are still open, neither of which touches a
 signature — which is why the package is not 1.0.0 yet:
 
-- **What a record's `ttl_sec` of 0 inherits**: the fixed 86400, or the zone's own TTL.
-  `DomainRecord::effectiveTtl()` returns null for that case rather than guessing, and would
-  gain a parameter if it turns out to be the zone's.
 - **The separator between multiple scopes in `X-OAuth-Scopes`.** Parsing accepts commas,
   whitespace or both until a multi-scope token settles it.
 - **A restricted user's grants** are covered by the test suite and have not been exercised
