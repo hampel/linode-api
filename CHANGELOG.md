@@ -1,6 +1,12 @@
 CHANGELOG
 =========
 
+0.2.1 (2026-09-13)
+------------------
+
+* README states `^0.2` as the constraint to write. `0.2.0` shipped saying `^0.1`, which
+  resolves to `0.1.0` and excludes the release it documents
+
 0.2.0 (2026-09-13)
 ------------------
 

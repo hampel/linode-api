@@ -8,8 +8,9 @@
 
 By [Simon Hampel](mailto:simon@hampelgroup.com)
 
-A PHP client for the [Linode (Akamai Cloud) API](https://techdocs.akamai.com/linode-api/reference/api),
-built on **PSR-18**.
+A PHP client for the
+[Linode (Akamai Cloud) API](https://techdocs.akamai.com/linode-api/reference/api), built on
+**PSR-18**.
 
 It wraps the **DNS endpoints** — zones and records — and the two endpoints that answer *does
 this token work, and what may it do*. That is a dozen of Linode's three hundred, deliberately:
@@ -520,11 +521,12 @@ up in a service provider of your own.
 
 ## Versioning and support
 
-`^0.1` is the constraint to write. PHP 8.3 or later.
+`^0.2` is the constraint to write. PHP 8.3 or later.
 
-**This is 0.x, so the public API can change in a minor release.** Composer reads `^0.1` as
-`>=0.1.0 <0.2.0`, which is the stability actually on offer: pin it and a `0.2.0` will not
-arrive unasked.
+**This is 0.x, so the public API can change in a minor release** — and one already has: `0.2.0`
+made an empty-bodied `200` raise rather than resolve to an empty response. Composer's caret
+pins to the minor below 1.0, so `^0.2` is `>=0.2.0 <0.3.0` and the next minor will not arrive
+unasked. Read the CHANGELOG before widening it.
 
 Three questions about Linode's own behaviour are still open, and two of them could move a
 signature — which is why the package is not 1.0.0 yet:
