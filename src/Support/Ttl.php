@@ -8,25 +8,43 @@ namespace Hampel\Linode\Api\Support;
  * The interval values Linode's DNS accepts, and what it does with one that is not on the
  * list.
  *
- * IT ROUNDS UP, SILENTLY. `ttl_sec`, `refresh_sec`, `retry_sec` and `expire_sec` each take
- * one of the values below, and any other number is rounded up to the next one - so asking
- * for 60 gets you 120, and asking for 86401 gets you 172800. The API returns 200, the
- * stored value is not the one you sent, and nothing says so.
+ * IT ROUNDS UP, SILENTLY. `ttl_sec`, `refresh_sec`, `retry_sec` and `expire_sec` on a zone,
+ * and `ttl_sec` on a record, each take one of the values below; any other number is rounded
+ * UP to the next one. Asking for 60 stores 120. The API returns 200, the stored value is not
+ * the one you sent, and nothing says so.
  *
- * Nothing in this package rewrites a caller's number, because a client that quietly changes
- * a value is the same failure one layer further in. Use round() to find out what a value
- * will become - before writing it, or to show the effective figure beside the requested one.
+ * ONE RULE, NOT TWO - AND THE SPECIFICATION SAYS OTHERWISE. Linode's own documentation
+ * describes a record's `ttl_sec` as rounded "to the NEAREST valid value" off a list that
+ * starts at 300, which would be a different rule from the zone fields'. Measured against the
+ * live API on 12 September 2026, by writing each value to a real record and reading back what
+ * was stored:
+ *
+ *     asked      0    1   30   60  120  300  3000  86401  2419201
+ *     stored     0   30   30  120  120  300  3600 172800  2419200
+ *
+ * That is round-up off the list below, identical to the zone rule, and it disagrees with the
+ * documentation twice over: 30 and 120 are accepted for a record, and 900 stores 3600 rather
+ * than the 300 that "nearest" would give. The zone rule was measured in the same run and does
+ * match its documentation. So there is one rule here because the API has one, not because the
+ * distinction was too fiddly to keep.
+ *
+ * Nothing in this package rewrites a caller's number - a client that quietly changes a value
+ * is the same failure one layer further in. Use round() to find out what a value will become,
+ * before writing it or to show the effective figure beside the requested one.
  *
  *     Ttl::round(60);        // 120
  *     Ttl::isValid(300);     // true
  *
- * ZERO IS NOT "NO CACHING". It means "use the default", and the default differs per field:
- * 86400 for ttl_sec, 14400 for refresh_sec and retry_sec, 1209600 for expire_sec. It is also
- * what every one of them reports until it has been set.
+ * ZERO IS NOT "NO CACHING". On a zone it means "use the default", and the default differs per
+ * field: 86400 for ttl_sec, 14400 for refresh_sec and retry_sec, 1209600 for expire_sec. It
+ * is also what every one of them reports until it has been set. On a RECORD, what zero
+ * inherits has not been measured - see DomainRecord::effectiveTtl().
  */
 final class Ttl
 {
     /**
+     * Every interval Linode stores, for a zone field and for a record alike.
+     *
      * @var list<int>
      */
     public const VALUES = [
@@ -35,25 +53,7 @@ final class Ttl
     ];
 
     /**
-     * A DOMAIN RECORD'S `ttl_sec` DOES NOT ACCEPT THE SAME VALUES AS A ZONE'S, and the
-     * specification is explicit about both. A record's list starts at 300 - 30 and 120 are
-     * not on it - and the rounding is described as to the NEAREST valid value rather than
-     * up, which is the zone fields' wording. So 60 on a zone becomes 120, and 60 on a record
-     * becomes 300.
-     *
-     * The difference is small and entirely invisible until a record's TTL is not what was
-     * asked for, so the two lists are kept apart rather than merged into one that would be
-     * right for one caller and wrong for the other.
-     *
-     * @var list<int>
-     */
-    public const RECORD_VALUES = [
-        0, 300, 3600, 7200, 14400, 28800, 57600, 86400,
-        172800, 345600, 604800, 1209600, 2419200,
-    ];
-
-    /**
-     * What Linode uses when the field is 0.
+     * What a ZONE uses when the field is 0. A record's zero is a different question.
      */
     public const DEFAULT_TTL = 86400;
 
@@ -68,47 +68,12 @@ final class Ttl
         return in_array($seconds, self::VALUES, true);
     }
 
-    public static function isValidForRecord(int $seconds): bool
-    {
-        return in_array($seconds, self::RECORD_VALUES, true);
-    }
-
-    /**
-     * What a DOMAIN RECORD's ttl_sec will become. Rounds to the nearest accepted value, as
-     * the specification describes for this field - not up, which is the zone fields' rule.
-     * A tie goes to the larger value, cache being cheaper than queries.
-     */
-    public static function roundForRecord(int $seconds): int
-    {
-        if ($seconds <= 0) {
-            return 0;
-        }
-
-        $nearest = self::RECORD_VALUES[1];
-        $distance = null;
-
-        foreach (self::RECORD_VALUES as $value) {
-            if ($value === 0) {
-                continue;
-            }
-
-            $gap = abs($value - $seconds);
-
-            if ($distance === null || $gap <= $distance) {
-                $distance = $gap;
-                $nearest = $value;
-            }
-        }
-
-        return $nearest;
-    }
-
     /**
      * The value Linode will actually store for this number.
      *
-     * Anything above the largest accepted value comes back as that value: there is nothing
-     * higher to round up to, and reporting the requested number would be the one answer that
-     * is certainly wrong.
+     * Anything above the largest accepted value comes back as that value - measured: 2419201
+     * stores 2419200. There is nothing higher to round up to, and reporting the requested
+     * number would be the one answer that is certainly wrong.
      */
     public static function round(int $seconds): int
     {
@@ -126,7 +91,7 @@ final class Ttl
     }
 
     /**
-     * The interval this field will behave as, resolving 0 to the default for that field.
+     * The interval a ZONE field will behave as, resolving 0 to the default for that field.
      *
      * @param  'ttl_sec'|'refresh_sec'|'retry_sec'|'expire_sec'  $field
      */

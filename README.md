@@ -135,7 +135,7 @@ $linode->domains()->all();                        // every zone, as a list
 $linode->domains()->get($id);                     // raises if it is not there
 $linode->domains()->find($id);                    // null if it is not there
 $linode->domains()->findByName('example.com');    // null if it is not there
-$linode->domains()->zoneFile($id);                // what Linode actually serves, line by line
+$linode->domains()->zoneFile($id);                // what Linode serves, line by line (see below)
 ```
 
 Creating one:
@@ -229,30 +229,43 @@ Four traps live in these, and each is why the constructor looks the way it does:
 - **Nothing stops a duplicate.** Linode will hold two identical A records for one name and
   DNS will serve both. `named()` first, where that matters.
 
-### TTLs are rounded, silently, and by two different rules
+### TTLs are rounded up, silently
 
-Linode accepts a fixed list of intervals and quietly changes anything else, with a 200 and no
-indication that the stored value is not the one you sent. The two rules differ, so the same
-900 seconds becomes 3600 on a zone and **300** on a record — rounded in opposite directions.
+Linode accepts a fixed list of intervals — 0, 30, 120, 300, 3600, 7200, 14400, 28800, 57600,
+86400, 172800, 345600, 604800, 1209600, 2419200 — and quietly rounds anything else **up** to
+the next one, with a 200 and no indication that the stored value is not the one you sent. Ask
+for 60 and you get 120; ask for 900 and you get 3600.
 
-|  | accepted values | what it does with another number |
-|---|---|---|
-| a zone's `ttl_sec`, `refresh_sec`, `retry_sec`, `expire_sec` | 0, 30, 120, 300, 3600 … 2419200 | rounds **up** |
-| a record's `ttl_sec` | 0, **300**, 3600 … 2419200 | rounds to the **nearest** |
+The same rule governs a zone's `ttl_sec`, `refresh_sec`, `retry_sec` and `expire_sec` and a
+record's `ttl_sec`.
+
+> **This contradicts Linode's own documentation**, which describes a record's `ttl_sec` as
+> rounded to the *nearest* valid value off a list starting at 300. Measured against the live
+> API on 12 September 2026 by writing each value to a real record and reading back what was
+> stored:
+>
+> | asked | 0 | 1 | 30 | 60 | 120 | 300 | 900 | 3000 | 86401 | 2419201 |
+> |---|---|---|---|---|---|---|---|---|---|---|
+> | stored | 0 | 30 | 30 | 120 | 120 | 300 | 3600 | 3600 | 172800 | 2419200 |
+>
+> 30 and 120 *are* accepted for a record, and 900 stores 3600 rather than the 300 "nearest"
+> would give. The zone rule was measured in the same run and does match its documentation.
 
 Nothing in this package rewrites your number — a client that quietly changes a value is the
-same failure one layer in. `Support\Ttl` reports what a value will become, and
-`effectiveTtl()` on either entity does it for that entity:
+same failure one layer in. `Support\Ttl` reports what a value will become:
 
 ```php
-Ttl::round(900);                                       // 3600 - a zone field, rounded up
-Ttl::roundForRecord(900);                              // 300  - a record, rounded to the nearest
-DomainRecord::a('www', '203.0.113.1')->withTtl(900)->effectiveTtl();   // 300
+Ttl::round(60);                                        // 120
+Ttl::round(900);                                       // 3600
+Domain::master(...)->withTtl(900)->effectiveTtl();     // 3600
+DomainRecord::a('www', '203.0.113.1')->withTtl(900)->effectiveTtl();   // 3600
 ```
 
-**Zero is not "no caching".** It means "use the default", and the default differs per field:
-86400 for a TTL, 14400 for refresh and retry, 1209600 for expire. It is also what every one
-of them reports until it has been set.
+**Zero is not "no caching".** On a *zone* it means "use the default", and the default differs
+per field: 86400 for a TTL, 14400 for refresh and retry, 1209600 for expire. It is also what
+every one of them reports until it has been set. On a *record*, `effectiveTtl()` returns
+**null** for zero — Linode does not document whose default it is, and if it inherits the
+zone's then a record cannot answer it alone.
 
 ## Filtering and sorting
 
@@ -413,6 +426,12 @@ something should say so. The ones marked *measured* were read off the live API o
 - **A zone's SOA and NS records are not records.** Linode generates and serves them without
   representing them in the record endpoint, so a zone that resolves perfectly well can answer
   with an empty list. `zoneFile()` is what shows the whole picture.
+- **The zone file lags the record endpoints, by minutes, and is not a read-your-writes
+  view** — *measured*. Straight after a change it rendered a TTL two edits old and a record
+  that had already been deleted; on another run a change had still not appeared after 160
+  seconds. It is authoritative about what is being *served*, which is exactly why it lags; it
+  is the wrong thing to diff straight after an edit to confirm the edit landed. Read the
+  record endpoint for that.
 - **A slave zone's records cannot be written** — they arrive by transfer.
 - **`v4beta` is a URL segment**, so pointing at it moves every request a client makes, not
   just the beta ones. That is why it is `$linode->withVersion()` returning a second client

@@ -306,8 +306,9 @@ final class DomainRecord implements \JsonSerializable
     /**
      * How long resolvers may cache this record.
      *
-     * A RECORD'S ACCEPTED VALUES START AT 300, not at 30 as a zone's do, and Linode rounds to
-     * the nearest one rather than up. `effectiveTtl()` reports what a value will become.
+     * Linode rounds up to its own list of intervals - the same list a zone uses, despite the
+     * documentation describing a different rule for records. See Ttl, which was corrected
+     * from measurement. `effectiveTtl()` reports what a value will become.
      */
     public function withTtl(int $seconds): self
     {
@@ -331,14 +332,23 @@ final class DomainRecord implements \JsonSerializable
     }
 
     /**
-     * The TTL that will actually apply, with Linode's rounding and its zero-means-default
-     * rule resolved.
+     * The TTL that will actually be stored, with Linode's silent rounding up applied.
+     *
+     * NULL WHEN THE TTL IS 0, and that is the honest answer rather than a missing feature. On
+     * a record, 0 means "the default" and Linode's documentation does not say whose - the
+     * fixed 86400 a zone's ttl_sec falls back to, or the zone's own TTL. Those differ by any
+     * factor the zone likes, and a record does not know which zone it is in, so this cannot
+     * answer it from here whichever turns out to be true.
+     *
+     * An earlier version returned 86400 for this case. That was a guess dressed as a fact,
+     * from the same documentation that turned out to be wrong about the rounding rule twice
+     * over, so it is now null and the caller decides.
      */
-    public function effectiveTtl(): int
+    public function effectiveTtl(): ?int
     {
         $ttl = $this->ttlSec ?? 0;
 
-        return $ttl > 0 ? Ttl::roundForRecord($ttl) : Ttl::DEFAULT_TTL;
+        return $ttl > 0 ? Ttl::round($ttl) : null;
     }
 
     /**

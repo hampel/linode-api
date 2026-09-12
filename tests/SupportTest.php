@@ -5,6 +5,8 @@ declare(strict_types=1);
 namespace Hampel\Linode\Api\Tests;
 
 use Hampel\Linode\Api\ApiError;
+use Hampel\Linode\Api\Entity\Domain;
+use Hampel\Linode\Api\Entity\DomainRecord;
 use Hampel\Linode\Api\Exception\InvalidArgumentException;
 use Hampel\Linode\Api\Exception\RuntimeException;
 use Hampel\Linode\Api\Result\Page;
@@ -76,43 +78,75 @@ final class SupportTest extends BaseTestCase
     }
 
     /**
-     * The zone fields round UP; a record's ttl_sec rounds to the NEAREST, off a shorter list
-     * that starts at 300. Both are the specification's own wording.
+     * The rounding table, measured against the live API on 12 September 2026 by writing each
+     * value to a real domain record and reading back what was stored.
+     *
+     * It contradicts Linode's own documentation twice, which is why it is pinned here as a
+     * table rather than derived from prose: the specification describes a record's ttl_sec as
+     * rounded to the NEAREST valid value off a list starting at 300, and it is neither - it
+     * rounds UP, off the same list the zone fields use, starting at 30.
      */
-    public function test_the_two_rounding_rules_are_not_the_same(): void
+    public static function ttlCases(): \Generator
     {
-        $this->assertSame(120, Ttl::round(60));
-        $this->assertSame(300, Ttl::round(121));
-        $this->assertSame(30, Ttl::round(1));
-        $this->assertSame(0, Ttl::round(0));
-        $this->assertSame(2419200, Ttl::round(99999999), 'nothing higher to round up to');
-
-        $this->assertSame(300, Ttl::roundForRecord(60));
-        $this->assertSame(300, Ttl::roundForRecord(1000));
-        $this->assertSame(3600, Ttl::roundForRecord(3000));
-        $this->assertSame(0, Ttl::roundForRecord(0));
-
-        // 900 is the value the harness probes with, because the two rules disagree about it
-        // in opposite directions - a zone rounds it up to 3600, a record down to 300.
-        $this->assertSame(3600, Ttl::round(900));
-        $this->assertSame(300, Ttl::roundForRecord(900));
+        yield 'zero stays zero' => [0, 0];
+        yield 'below the floor' => [1, 30];
+        yield 'the floor itself' => [30, 30];
+        yield 'the documentation said 300 here' => [60, 120];
+        yield 'on the list' => [120, 120];
+        yield 'on the list, higher' => [300, 300];
+        yield 'rounds up, not to the nearest' => [900, 3600];
+        yield 'nearer the one above' => [3000, 3600];
+        yield 'one past a value' => [86401, 172800];
+        yield 'past the ceiling, capped' => [2419201, 2419200];
     }
 
-    public function test_zero_means_the_fields_own_default_not_no_caching(): void
+    #[\PHPUnit\Framework\Attributes\DataProvider('ttlCases')]
+    public function test_the_measured_rounding_table(int $asked, int $stored): void
+    {
+        $this->assertSame($stored, Ttl::round($asked));
+    }
+
+    /**
+     * One rule, because the API has one - measured for a record and for a zone in the same
+     * run. A second rule existed here until the harness contradicted it.
+     */
+    public function test_a_record_and_a_zone_round_the_same_way(): void
+    {
+        $this->assertSame(120, Ttl::round(60));
+        $this->assertSame(120, DomainRecord::a('www', '203.0.113.1')->withTtl(60)->effectiveTtl());
+        $this->assertSame(120, Domain::master('a.example', 'h@a.example')->withTtl(60)->effectiveTtl());
+    }
+
+    /**
+     * A record's zero cannot be resolved from the record: Linode does not document whose
+     * default it is, and if it inherits the zone's the record does not know the zone.
+     * Returning 86400 there was a guess, and the guesses in this area have not been good.
+     */
+    public function test_a_records_zero_ttl_is_null_because_it_is_not_knowable_from_here(): void
+    {
+        $this->assertNull(DomainRecord::a('www', '203.0.113.1')->withTtl(0)->effectiveTtl());
+        $this->assertNull(DomainRecord::a('www', '203.0.113.1')->effectiveTtl());
+    }
+
+    /**
+     * A ZONE's zero IS documented, and differs per field.
+     */
+    public function test_zero_means_the_zone_fields_own_default(): void
     {
         $this->assertSame(86400, Ttl::effective('ttl_sec', 0));
         $this->assertSame(14400, Ttl::effective('refresh_sec', 0));
         $this->assertSame(14400, Ttl::effective('retry_sec', 0));
         $this->assertSame(1209600, Ttl::effective('expire_sec', 0));
         $this->assertSame(300, Ttl::effective('ttl_sec', 300));
+        $this->assertSame(86400, Domain::master('a.example', 'h@a.example')->withTtl(0)->effectiveTtl());
     }
 
-    public function test_validity_is_per_field_family(): void
+    public function test_validity_is_membership_of_the_one_list(): void
     {
         $this->assertTrue(Ttl::isValid(120));
-        $this->assertFalse(Ttl::isValidForRecord(120));
-        $this->assertTrue(Ttl::isValidForRecord(300));
+        $this->assertTrue(Ttl::isValid(300));
         $this->assertFalse(Ttl::isValid(61));
+        $this->assertFalse(Ttl::isValid(900));
     }
 
     public function test_a_page_reads_linodes_envelope(): void

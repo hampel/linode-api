@@ -137,6 +137,16 @@ final class EntityTest extends BaseTestCase
         $this->assertSame(300, Domain::master('a.example', 'h@a.example')->withTtl(300)->effectiveTtl());
     }
 
+    /**
+     * The rule is the same for both, measured. See SupportTest for the whole table.
+     */
+    public function test_a_records_ttl_rounds_up_like_a_zones(): void
+    {
+        $this->assertSame(120, DomainRecord::a('www', '203.0.113.1')->withTtl(60)->effectiveTtl());
+        $this->assertSame(3600, DomainRecord::a('www', '203.0.113.1')->withTtl(900)->effectiveTtl());
+        $this->assertNull(DomainRecord::a('www', '203.0.113.1')->withTtl(0)->effectiveTtl());
+    }
+
     public function test_every_record_type_has_a_constructor_that_takes_what_it_needs(): void
     {
         $this->assertSame(
@@ -234,14 +244,6 @@ final class EntityTest extends BaseTestCase
         $this->assertTrue(RecordType::CAA->usesTag());
         $this->assertTrue(RecordType::AAAA->isAddress());
         $this->assertFalse(RecordType::CNAME->isAddress());
-    }
-
-    public function test_a_records_ttl_rounds_to_the_nearest_of_its_own_shorter_list(): void
-    {
-        // 30 and 120 are on the ZONE's list and not on a record's, which starts at 300
-        $this->assertSame(300, DomainRecord::a('www', '203.0.113.1')->withTtl(60)->effectiveTtl());
-        $this->assertSame(3600, DomainRecord::a('www', '203.0.113.1')->withTtl(3000)->effectiveTtl());
-        $this->assertSame(86400, DomainRecord::a('www', '203.0.113.1')->withTtl(0)->effectiveTtl());
     }
 
     public function test_a_name_is_relative_to_the_zone_and_the_apex_is_empty(): void

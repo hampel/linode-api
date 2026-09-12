@@ -25,10 +25,11 @@ Initial build. Nothing is released, so everything here is the first version of i
   report what it can than stop at the first thing it may not see
 * `Support\Filter` for `X-Filter`, which is a request header on this API rather than a query
   string, and carries the ordering too
-* `Support\Ttl`, because Linode silently rounds every interval to its own list — and by two
-  different rules: a zone's fields round up from a list starting at 30, a record's `ttl_sec`
-  rounds to the nearest off one starting at 300. Nothing here rewrites a caller's value;
-  `effectiveTtl()` reports what it will become
+* `Support\Ttl`, because Linode silently rounds every interval UP to its own list. One rule
+  for a zone's four interval fields and a record's `ttl_sec` alike — which is not what the
+  specification says about records, and the difference was measured rather than read. Nothing
+  here rewrites a caller's value; `effectiveTtl()` reports what it will become, and returns
+  null for a record's zero because what that inherits is undocumented
 * an exception per failure the API distinguishes, so a consumer catches what it can act on:
   `ValidationException` (400, with `fieldErrors()`), `NotAuthenticatedException`,
   `NotPermittedException`, `NotFoundException`, `TooManyRequestsException`, `ServerException`,
@@ -95,11 +96,37 @@ the specification — the suite was green the whole time, because the stub agree
   exist — and an account that size walks two pages, so the lazy page walk is exercised across
   a real boundary
 
+### Found by the write exercise, same day
+
+`records` was run against a real zone — one throwaway TXT record, created, probed and deleted,
+plus the zone's own TTL changed and restored.
+
+* **a record's `ttl_sec` rounds UP off the same list a zone uses, not to the nearest off a
+  shorter one.** Linode's documentation says the latter. Measured by writing each value and
+  reading back what was stored: 60 stores 120 (not 300), 900 stores 3600 (not 300), and 30 and
+  120 are accepted for a record though the documented list starts at 300. `Support\Ttl` had
+  the documented rule and has been corrected to the measured one; `RECORD_VALUES`,
+  `roundForRecord()` and `isValidForRecord()` are gone, there being one rule rather than two.
+  A re-run then predicted all nine record values and all four zone values
+* **the zone file lags the record endpoints, by minutes rather than seconds.** Straight after
+  a write it rendered a TTL two edits old and a record already deleted; on another run a
+  change had still not appeared after 160 seconds. It is authoritative about what is served,
+  which is why it lags — it is not a read-your-writes view, and diffing it to confirm an edit
+  landed will mislead
+* confirmed: a PUT of one field really is partial, and a record is readable from the record
+  endpoint immediately after its create returns
+* `DomainRecord::effectiveTtl()` now returns `?int` — null for a `ttl_sec` of 0. It returned
+  86400 on the reasoning that zero means the zone default, which is a guess about a field
+  Linode does not document, from the same documentation already found wrong twice here
+
 ### Still not measured
 
 * **the separator between multiple scopes in `X-OAuth-Scopes`.** The token it was run with
   holds one scope, so no separator was observable and `Result\Scopes` still splits on commas,
   whitespace or both. A multi-scope token settles it; `verify` prints the raw header
-* every write path. The suite drives them through a stubbed PSR-18 client, which by
-  construction agrees with whatever the package believes; only the `records` exercise can
-  contradict it, and it has not been run
+* **what a record's `ttl_sec` of 0 inherits** — the fixed 86400, or the zone's own TTL. Only
+  the rendered zone file can answer it and that file did not converge inside the probe's
+  150-second ceiling, so the `records` exercise reports it inconclusive rather than guessing.
+  `effectiveTtl()` returns null for the case, which is right either way
+* **a restricted user's grants.** The account's user is unrestricted, so `/profile/grants`
+  answers the 204 and the `Grants` branch is covered only by the suite

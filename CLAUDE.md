@@ -92,11 +92,29 @@ read off the live API on 12 September 2026.
   The `records` exercise is what proves it against the live API rather than against a mock.
 - **A record's type cannot be changed** - the field is absent from the update schema, so
   `DomainRecords::update()` strips it rather than sending it to be rejected.
-- **TTLs are rounded silently, by two different rules.** A zone's four interval fields round
-  **up** from a list starting at 30; a record's `ttl_sec` rounds to the **nearest** off a
-  list starting at 300. 900 seconds is the value that discriminates - 3600 on a zone, 300 on
-  a record, in opposite directions - which is why the harness probes with it. Zero is not "no
-  caching": it means "use the default", which differs per field.
+- **TTLs are rounded UP, silently, by ONE rule** - and the specification says otherwise for
+  records. It describes a record's `ttl_sec` as rounded to the *nearest* valid value off a
+  list starting at 300; measured on 12 September 2026 by writing each value to a real record,
+  it rounds up off the same list a zone uses, starting at 30:
+
+  ```
+  asked      0    1   30   60  120  300   900  3000  86401  2419201
+  stored     0   30   30  120  120  300  3600  3600 172800  2419200
+  ```
+
+  The zone rule was measured in the same run and does match its documentation. `Support\Ttl`
+  carried the two-rule model until the harness contradicted it; `SupportTest::ttlCases()`
+  pins the table so prose cannot drift back in. Zero on a ZONE means "use the default", which
+  differs per field. Zero on a RECORD is undocumented and `DomainRecord::effectiveTtl()`
+  returns null for it rather than guessing again.
+- **The zone file lags the record endpoints, by MINUTES** - *measured*: straight after a
+  write it rendered a TTL two edits old and a record that had already been deleted, and on
+  another run a change had still not appeared after 160 seconds. It is authoritative about
+  what is SERVED, which is why it lags. Do not diff it to confirm an edit landed; read the
+  record endpoint. Any harness probe reading it has to wait for convergence rather than break
+  on the first sight of what it is looking for - the `records` exercise did exactly that once
+  and manufactured a false reading. It is also why the ttl-0 question is still open: the
+  probe is correct now and the file simply does not settle inside a reasonable ceiling.
 - **SRV takes its service and protocol undecorated.** Linode prepends the underscore and
   appends the period itself, so `_sip` becomes `__sip` and matches nothing, with no error.
   `DomainRecord::srv()` refuses a leading underscore. SRV also has no `name` of its own -
@@ -154,7 +172,20 @@ Against a real account with a `domains:read_write` token, all four read-only exe
   honoured. That account size also walks two pages, so `apiEach()` is exercised across a real
   page boundary.
 - `domains` — 170 zones read and parsed, every one master/active.
-- `records` has still never been run. Every write path remains unverified.
+- `records` **has now been run**, and found the TTL rule above. It also confirmed that the
+  PUT really is partial - a ttl-only update left the target intact - and that a record is
+  readable from the record endpoint immediately after its create returns.
+
+**Two lessons from that run, both worth keeping:**
+
+- **Verify a restore, not just the restore call.** The exercise reported the zone TTL
+  restored and it was; reading the zone file afterwards showed 120 and a deleted record,
+  which looked like a botched cleanup and was actually the zone-file lag above. Checking the
+  API rather than the rendered file is what told the two apart.
+- **A probe that breaks on the first sight of its own marker reads the previous state.** The
+  ttl-0 probe did that, matched a stale line, and printed a confident-looking measurement
+  with `waited 0s`. It now settles on a distinctive value, waits for that to render, and only
+  then changes it and waits for the value to move.
 
 ## What the suite cannot tell you
 

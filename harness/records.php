@@ -96,6 +96,10 @@ if (!$permitted) {
 
 $records = $linode->domains()->records((int) $zone->id);
 
+// Read before writing. The zone TTL probe below changes a real zone's setting, so what it was
+// is captured here rather than assumed, and put back in the finally.
+$zoneTtlBefore = $zone->ttlSec ?? 0;
+
 // Named so that a failed cleanup is unmistakable in Linode's own DNS manager, and under a
 // label nothing resolves against.
 $label = 'zz-delete-me-linode-api-harness-' . date('Ymd-His');
@@ -103,16 +107,77 @@ $probe = null;
 $failure = null;
 $leaked = false;
 
-// Deliberately not one of Linode's accepted values, and chosen because it discriminates: 900
-// sits between 300 and 3600, nearer the first. So the two candidate rules give different
-// answers, and what comes back says which one the API actually uses.
+// The TTL rule is mapped rather than spot-checked, because one value cannot settle it.
 //
-//   300   nearest  - what the record documentation says, and what this package predicts
-//   3600  up       - the rule the ZONE fields use
+// The specification says a record's ttl_sec is "rounded to the NEAREST valid value" off a list
+// starting at 300, while a zone's four interval fields round UP off a list starting at 30.
+// Measured on 12 September 2026, 900 came back as 3600 - so it rounds up, not to the nearest,
+// and the documentation is wrong about that. But 900 rounds up to 3600 under BOTH candidate
+// lists, so it says nothing about where the list starts.
 //
-// A run that comes back 3600 means a record's ttl_sec rounds up like a zone's after all, and
-// Support\Ttl has the rule wrong.
+// These do. 60 and 120 are the discriminators:
+//
+//   asked   if the list starts at 300   if it is the zone list (30, 120, 300, ...)
+//   60      300                         120
+//   120     300                         120
+//
+// One record is created and then updated through each value, rather than one record per
+// value: it is the same measurement with a single object to clean up, and it exercises the
+// update path as many times as it exercises the rounding.
 $askedTtl = 900;
+
+$ttlProbes = [0, 1, 30, 60, 120, 300, 3000, 86401, 2419201];
+
+/**
+ * The TTL the zone file actually renders for our probe record, or null when the file does not
+ * mention it yet.
+ *
+ * THE ZONE FILE IS NOT LIVE, AND THE LAG IS MINUTES. Measured on 12 September 2026: straight
+ * after a write it showed a TTL two changes old and a record that had already been deleted,
+ * and on another run a change had still not rendered after 160 seconds. So anything read from
+ * it has to be waited for rather than taken on the first look, and a probe that breaks on the
+ * first sight of its own label reads the previous state and calls it a result. This one did
+ * exactly that before it was fixed.
+ *
+ * @param  callable(): list<string>  $zoneFile
+ */
+$renderedTtl = static function (callable $zoneFile) use ($label): ?int {
+    foreach ($zoneFile() as $line) {
+        if (str_contains($line, $label) && preg_match('/\s(\d+)\s+TXT\s/', $line, $m) === 1) {
+            return (int) $m[1];
+        }
+    }
+
+    return null;
+};
+
+/**
+ * Poll until the rendered TTL is present and is not $notThis, so convergence is observed
+ * rather than assumed.
+ *
+ * 300s of headroom. 150 was not enough on one run - the file had not moved after 160s - and a
+ * timeout here reads as a finding about the API when it is really a finding about this loop,
+ * so the ceiling is set well past anything observed rather than just past it.
+ *
+ * @param  callable(): ?int  $read
+ * @return array{int|null, int}  the value, and how long it took
+ */
+$waitFor = static function (callable $read, ?int $notThis): array {
+    $waited = 0;
+
+    while ($waited <= 300) {
+        $value = $read();
+
+        if ($value !== null && $value !== $notThis) {
+            return [$value, $waited];
+        }
+
+        sleep(10);
+        $waited += 10;
+    }
+
+    return [null, $waited];
+};
 
 try {
     $probe = $records->create(
@@ -127,30 +192,28 @@ try {
         'fqdn' => $probe->fqdn($zone->domain),
         'ttl asked for' => (string) $askedTtl,
         'ttl stored' => (string) $probe->ttlSec,
-        'ttl this package predicted' => (string) Ttl::roundForRecord($askedTtl),
+        'ttl this package predicted' => (string) Ttl::round($askedTtl),
     ]);
 
-    if ($probe->ttlSec !== Ttl::roundForRecord($askedTtl)) {
+    if ($probe->ttlSec !== Ttl::round($askedTtl)) {
         $io->warn(sprintf(
             '✗ stored %s, predicted %s - the rounding rule in Support\Ttl is wrong or has changed.',
             (string) $probe->ttlSec,
-            (string) Ttl::roundForRecord($askedTtl)
+            (string) Ttl::round($askedTtl)
         ));
-        $io->warn('  Worth a changelog entry either way. 3600 would mean it rounds up, like a zone.');
     } else {
-        $io->success('✓ the record TTL rounding rule still holds');
+        $io->success('✓ the TTL rounding rule still holds');
     }
 
     $io->line();
 
     // Readable straight away, or not? Worth knowing before writing anything that reads back
-    // what it just wrote.
-    $readBack = $records->find((int) $probe->id);
-
-    if ($readBack === null) {
+    // what it just wrote. Note this is the RECORD endpoint - the zone file is a different
+    // story entirely, and the probe further down is about that.
+    if ($records->find((int) $probe->id) === null) {
         $io->warn('? the record was not readable immediately after the create returned');
     } else {
-        $io->success('✓ readable immediately, no propagation wait needed for the API');
+        $io->success('✓ readable immediately from the record endpoint');
     }
 
     $io->line();
@@ -172,6 +235,127 @@ try {
         $io->error('  Connection::put() documents the opposite, and every update in this package');
         $io->error('  relies on it. This needs fixing before anything else.');
     }
+
+    $io->line();
+
+    // WHAT DOES ttl_sec: 0 ON A RECORD INHERIT? The specification says 0 is "the default" and
+    // does not say whose. Two candidates, and here they differ by a large factor: the fixed
+    // 86400 a ZONE's ttl_sec falls back to, or the zone's own TTL.
+    //
+    // The record endpoint reports the stored 0 either way, so only the rendered zone file can
+    // answer it - which is why this waits twice. It runs BEFORE the zone-TTL probe below, so
+    // the zone is still at its own setting and the two candidates stay distinguishable.
+    $zoneTtlNow = $linode->domains()->get((int) $zone->id)->ttlSec ?? 0;
+
+    $io->success('What a record ttl_sec of 0 inherits:');
+    $io->values([
+        "the zone's own ttl_sec" => (string) $zoneTtlNow,
+        'the fixed zone default' => (string) Ttl::DEFAULT_TTL,
+    ]);
+
+    // Settle on a distinctive value first and watch it render, so the next wait has something
+    // definite to differ from.
+    $marker = 7200;
+    $records->update((int) $probe->id, ['ttl_sec' => $marker]);
+
+    [$seen, $waitedFirst] = $waitFor(
+        static fn (): ?int => $renderedTtl(static fn (): array => $linode->domains()->zoneFile((int) $zone->id)),
+        null
+    );
+
+    if ($seen !== $marker) {
+        $io->warn(sprintf(
+            '? the zone file rendered %s after %ds, not the %d just written - inconclusive, and'
+                . ' not a finding about the API.',
+            $seen === null ? 'nothing' : (string) $seen,
+            $waitedFirst,
+            $marker
+        ));
+    } else {
+        $records->update((int) $probe->id, ['ttl_sec' => 0]);
+
+        [$rendered, $waited] = $waitFor(
+            static fn (): ?int => $renderedTtl(static fn (): array => $linode->domains()->zoneFile((int) $zone->id)),
+            $marker
+        );
+
+        if ($rendered === null) {
+            $io->warn(sprintf('? the zone file had not moved off %d after %ds - inconclusive.', $marker, $waited));
+        } else {
+            $io->values([
+                'rendered with ttl_sec 0' => (string) $rendered,
+                'after waiting' => $waitedFirst . 's then ' . $waited . 's',
+            ]);
+
+            if ($rendered === $zoneTtlNow) {
+                $io->success("✓ a record ttl_sec of 0 INHERITS THE ZONE's TTL");
+            } elseif ($rendered === Ttl::DEFAULT_TTL) {
+                $io->success('✓ a record ttl_sec of 0 is the fixed 86400, independent of the zone');
+            } else {
+                $io->warn('? neither candidate - the rendered value matches nothing expected');
+            }
+        }
+    }
+
+    $io->line();
+
+    // The rounding rule, mapped across the range rather than spot-checked, for a record and
+    // then for the zone. Each line is asked -> stored (predicted); a disagreement column is
+    // the finding. This is what corrected Support\Ttl in the first place.
+    $io->success('Record TTL rounding, asked -> stored (predicted):');
+
+    $wrong = 0;
+
+    foreach ($ttlProbes as $asked) {
+        $stored = $records->update((int) $probe->id, ['ttl_sec' => $asked])->ttlSec;
+        $predicted = Ttl::round($asked);
+
+        if ($stored !== $predicted) {
+            $wrong++;
+        }
+
+        $io->line(sprintf(
+            '    %-8s -> %-8s (%s) %s',
+            (string) $asked,
+            (string) $stored,
+            (string) $predicted,
+            $stored === $predicted ? '' : '  <- disagrees'
+        ));
+    }
+
+    $io->line($wrong > 0
+        ? sprintf('  ✗ %d of %d disagree - Support\Ttl has the record rule wrong.', $wrong, count($ttlProbes))
+        : '  ✓ Support\Ttl predicts every one of them');
+
+    $io->line();
+
+    // The same question at the zone level. This one touches the real zone object rather than
+    // a throwaway, so it runs last and the finally puts the original back.
+    $io->success('Zone TTL rounding, asked -> stored (predicted):');
+
+    $zoneWrong = 0;
+
+    foreach ([60, 120, 900, 86401] as $asked) {
+        $stored = $linode->domains()->update((int) $zone->id, ['ttl_sec' => $asked])->ttlSec;
+        $predicted = Ttl::round($asked);
+
+        if ($stored !== $predicted) {
+            $zoneWrong++;
+        }
+
+        $io->line(sprintf(
+            '    %-8s -> %-8s (%s) %s',
+            (string) $asked,
+            (string) $stored,
+            (string) $predicted,
+            $stored === $predicted ? '' : '  <- disagrees'
+        ));
+    }
+
+    $io->line($zoneWrong > 0
+        ? sprintf('  ✗ %d of 4 disagree - Support\Ttl has the zone rule wrong too.', $zoneWrong)
+        : '  ✓ Support\Ttl predicts the zone rule as well');
+
 } catch (ExceptionInterface $e) {
     $failure = $e;
     $io->error('✗ ' . $e::class);
@@ -179,6 +363,23 @@ try {
 } finally {
     // PHP does not run a finally on exit(), so every exit in this exercise is outside the
     // block - otherwise a successful run would be the one that skipped its own cleanup.
+    try {
+        $restored = $linode->domains()->update((int) $zone->id, ['ttl_sec' => $zoneTtlBefore])->ttlSec;
+
+        if ($restored !== $zoneTtlBefore) {
+            $leaked = true;
+            $io->error(sprintf(
+                '✗ the zone TTL was %s and is now %s - put it back by hand.',
+                (string) $zoneTtlBefore,
+                (string) $restored
+            ));
+        }
+    } catch (ExceptionInterface $cleanup) {
+        $leaked = true;
+        $io->error('✗ COULD NOT RESTORE THE ZONE TTL - ' . $cleanup::class);
+        $io->error(sprintf('Set %s back to ttl_sec %s by hand.', $zone->domain, (string) $zoneTtlBefore));
+    }
+
     if ($probe !== null && $probe->id !== null) {
         try {
             $records->delete($probe->id);
