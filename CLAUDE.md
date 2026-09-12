@@ -1,0 +1,139 @@
+# hampel/linode-api
+
+A PHP client for the Linode (Akamai Cloud) API v4, over any PSR-18 HTTP client. It wraps the
+DNS endpoints and the two that identify a credential — a dozen of some three hundred paths,
+deliberately, with a first-class extension point for the rest.
+
+## Commands
+
+```bash
+composer check          # lint, analyse, test - what CI runs
+composer test           # phpunit
+composer analyse        # phpstan, level 10, PHP 8.3-8.5 in one pass
+composer format         # pint
+```
+
+`composer-require-checker` is **not** in `composer check` — it lives outside the package and
+only CI runs it, so nothing local re-runs it when an import changes. Run it by hand after
+adding or changing any `use` in `src/`:
+
+```bash
+mkdir -p /tmp/crc && composer -d /tmp/crc require maglnet/composer-require-checker
+/tmp/crc/vendor/bin/composer-require-checker check composer.json
+```
+
+## Layout
+
+| path | what it is |
+|---|---|
+| `src/Client.php` | the entry point; named accessors and `endpoint()` |
+| `src/Connection.php` | everything that touches HTTP |
+| `src/Config.php` | which API, which version, and how URLs are built |
+| `src/Authentication/` | the credential, and the interface a refreshing one would implement |
+| `src/Endpoint/` | endpoint groups, and the `Endpoint` base class every extension builds on |
+| `src/Entity/` | what an endpoint answers with; each reads and writes |
+| `src/Enum/` | the closed sets - record type, domain type and status, CAA tag |
+| `src/Result/` | pagination, response metadata, scopes, the token check |
+| `src/Support/` | casting, the `X-Filter` builder, the TTL rules, PSR-17 discovery |
+| `src/Exception/` | the hierarchy, from `LinodeException` down |
+| `harness/` | rig exercises - real calls to the real API |
+
+## One class per record type would have been wrong, and one constructor would too
+
+Linode rejects a field that does not belong to the record type being created, so a single
+constructor with eleven optional arguments produces a payload the API refuses and a call site
+that cannot be read. Hence a named constructor per type on `DomainRecord`, and a `toArray()`
+that emits only the fields that type may carry.
+
+They are not separate CLASSES because Linode's create body is a subset of what a read returns:
+a second write-only class would duplicate a dozen fields to omit one, and the round trip -
+read a record, change a field, send it back - would need a conversion nobody would keep in
+step.
+
+## Facts about the Linode API worth not rediscovering
+
+Each is asserted in `tests/` or printed by a harness exercise. Those marked *measured* were
+read off the live API on 12 September 2026.
+
+- **`Retry-After: 60` is on every response, including a 200** — *measured*, beside
+  `X-RateLimit-Remaining: 1839`. Its presence is not a throttle signal, and a client that
+  backed off on seeing one would sleep after every successful call. Only a 429 means it.
+- **`GET /v4/profile` needs no OAuth scope**, which is what makes it the token check. Every
+  other endpoint conflates "your token is wrong" with "your token may not do this".
+- **`GET /v4/profile/grants` answers 204 for an UNRESTRICTED user.** Decoded as an ordinary
+  body that is an empty grants object, which says the user may do nothing — the opposite of
+  the truth. `Profile::grants()` returns null for it and `Profile::$restricted` is the field
+  to branch on. This is the trap in this API most likely to be read backwards.
+- **A missing token and a made-up one are indistinguishable** — *measured*, byte for byte:
+  `401 {"errors":[{"reason":"Invalid Token"}]}` for both, and for an expired or revoked one.
+  So no exception message here claims to know which of the four it was.
+- **Filtering is a request HEADER, not a query string.** `X-Filter` carries a JSON object.
+  There is no `?domain=example.com` on this API.
+- **A filter that stopped being honoured would be a silent success**, not an error: a 200
+  carrying the whole collection. `findByName()` therefore re-checks the name it got back, and
+  the `filtering` exercise compares a filtered count against an unfiltered one, which is a
+  question a mocked suite cannot ask - the mock honours the filter by construction.
+- **`page_size` below 25 is a 400** — *measured*, `{"field":"page_size","reason":"Must be
+  25-500"}`. Surprising to anyone who has asked another API for one item to see the shape of
+  it. `Page::assertValidPageSize()` refuses it before spending a request.
+- **A page past the end is an empty page, not an error** — unlike some APIs, so "read until
+  empty" works here. `apiEach()` still terminates on `hasMore()`, which saves one request per
+  walk on an API that counts them.
+- **Every update is a PUT and every PUT is partial.** Sending one field changes that field.
+  The `records` exercise is what proves it against the live API rather than against a mock.
+- **A record's type cannot be changed** - the field is absent from the update schema, so
+  `DomainRecords::update()` strips it rather than sending it to be rejected.
+- **TTLs are rounded silently, by two different rules.** A zone's four interval fields round
+  **up** from a list starting at 30; a record's `ttl_sec` rounds to the **nearest** off a
+  list starting at 300. 900 seconds is the value that discriminates - 3600 on a zone, 300 on
+  a record, in opposite directions - which is why the harness probes with it. Zero is not "no
+  caching": it means "use the default", which differs per field.
+- **SRV takes its service and protocol undecorated.** Linode prepends the underscore and
+  appends the period itself, so `_sip` becomes `__sip` and matches nothing, with no error.
+  `DomainRecord::srv()` refuses a leading underscore. SRV also has no `name` of its own -
+  Linode composes it - so one is not sent.
+- **Dates carry no timezone and are UTC** — `2018-01-01T00:01:01`, no `Z`, no offset. PHP
+  reads an unqualified string in its own default timezone, so the same response is a
+  different instant on a box set to Australia/Sydney. `Cast::datetime()` supplies UTC rather
+  than inferring it, and leaves a value that does carry an offset alone.
+- **A successful DELETE is `{}` with a 200**, not a 204.
+- **A zone's SOA and NS records are not records.** Linode generates and serves them without
+  representing them in the record endpoint, so a healthy zone can answer with an empty list.
+  `Domains::zoneFile()` is the whole picture.
+- **A domain is unique across the whole of Linode**, not just across one account - which is
+  why a create can fail for a reason that is about the world rather than about the request.
+- **`v4beta` is a URL segment**, so it moves every request a client makes. Hence
+  `Client::withVersion()` returning a second client rather than a flag on a call.
+- **The deployed API runs ahead of the published specification** — *measured*,
+  `X-Spec-Version: 4.235.1` against a document at 4.215.0.
+- **Linode's DNS has no SSHFP, TLSA, NAPTR, DNSKEY or DS.** `RecordType` is the complete set.
+
+## The harness
+
+`vendor/bin/rig` lists the exercises. `verify`, `domains`, `errors` and `filtering` are
+read-only.
+
+`records` **writes to real DNS**: it creates a throwaway TXT record in `LINODE_DOMAIN`, reads
+it back, updates it and deletes it in a `finally`. It is opt-in:
+
+```bash
+LINODE_DOMAIN=example.com LINODE_WRITE_RECORDS=yes vendor/bin/rig records
+```
+
+`yes` rather than `1`, so it cannot be set by habit. Under an agent it refuses even then,
+unless `LINODE_AGENT_MAY_WRITE_RECORDS=1` is also given **on the command line** for that one
+run — never in `.env`, because a persisted authorisation is one nobody gave. See
+`harness/lib/agent.php`.
+
+**If an exercise fails for want of a credential, that is the guard working.** The rig does not
+load `.env` in an agent session. Do not go looking for the token.
+
+## What the suite cannot tell you
+
+Every test drives a stubbed PSR-18 client, so the stub encodes the same assumptions the code
+does: when the API changes, both stay agreed with each other and disagreed with reality. The
+harness is the only instrument that can see that, which is the whole argument for it being
+assertion-free and run by a person.
+
+Two things in particular are still unverified against a live account, and both are noted in
+the CHANGELOG: the separator in the `X-OAuth-Scopes` header, and every write path.
