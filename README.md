@@ -498,24 +498,44 @@ which is what the Laravel wrapper below is for.
 
 ## Laravel
 
-A separate package, `hampel/linode-api-laravel`, provides a service provider, a manager for
-named accounts, a facade, and a PSR-18 adapter over Laravel's HTTP client so `Http::fake()`,
-`Http::assertSent()` and `Http::preventStrayRequests()` all reach this traffic. Nothing in
-this package depends on it, or on Laravel.
+Nothing here depends on Laravel, and the transport is injected rather than chosen — so a
+framework's own HTTP client can carry this traffic by implementing PSR-18's one method over
+it. That is what makes `Http::fake()` and `Http::preventStrayRequests()` able to see these
+requests, which they cannot when a package holds its own client.
+
+A `hampel/linode-api-laravel` providing a service provider, a manager for named accounts, a
+facade and that adapter is planned. It is **not released yet**; until it is, wire the client
+up in a service provider of your own.
 
 ## Versioning and support
 
-`^1.0` is the constraint to write. PHP 8.3 or later.
+`^0.1` is the constraint to write. PHP 8.3 or later.
 
-The public API is every class, method and signature outside `tests/` and `harness/`. A break
-in one means a new major version. Two things in particular:
+**This is 0.x, so the public API can change in a minor release.** Composer reads `^0.1` as
+`>=0.1.0 <0.2.0`, which is the stability actually on offer: pin it and a `0.2.0` will not
+arrive unasked.
+
+Three questions about Linode's own behaviour are still open, and two of them could move a
+signature — which is why the package is not 1.0.0 yet:
+
+- **What a record's `ttl_sec` of 0 inherits**: the fixed 86400, or the zone's own TTL.
+  `DomainRecord::effectiveTtl()` returns null for that case rather than guessing, and would
+  gain a parameter if it turns out to be the zone's.
+- **The separator between multiple scopes in `X-OAuth-Scopes`.** Parsing accepts commas,
+  whitespace or both until a multi-scope token settles it.
+- **A restricted user's grants** are covered by the test suite and have not been exercised
+  against a real restricted account.
+
+1.0.0 follows once those close. From it, a break in any class, method or signature outside
+`tests/` and `harness/` means a new major. Two things will be worth knowing then, and are
+worth knowing now:
 
 - **`RecordType`, `DomainType`, `DomainStatus` and `CaaTag` are enums, so an exhaustive
-  `match` over one throws `UnhandledMatchError` the day a case is added.** Adding a case is
-  therefore a major here — but write a `default` arm anyway.
-- **`ApiException::$statusCode`, `$errors`, `$body` and `$retryAfter` are covered.** What is
-  inside one of Linode's error objects, and the shape of an entity's `raw`, are the API's and
-  are not.
+  `match` over one throws `UnhandledMatchError` the day a case is added.** Write a `default`
+  arm.
+- **`ApiException::$statusCode`, `$errors`, `$body`, `$retryAfter` and `$meta` are the
+  supported surface.** What is inside one of Linode's error objects, and the shape of an
+  entity's `raw`, are the API's and are not.
 
 Entities serialise to the payload the API sent, unchanged, so a field added to the API after
 a release is reachable through `$entity->raw` without waiting for one.
