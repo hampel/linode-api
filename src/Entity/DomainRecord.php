@@ -339,10 +339,6 @@ final class DomainRecord implements \JsonSerializable
      * fixed 86400 a zone's ttl_sec falls back to, or the zone's own TTL. Those differ by any
      * factor the zone likes, and a record does not know which zone it is in, so this cannot
      * answer it from here whichever turns out to be true.
-     *
-     * An earlier version returned 86400 for this case. That was a guess dressed as a fact,
-     * from the same documentation that turned out to be wrong about the rounding rule twice
-     * over, so it is now null and the caller decides.
      */
     public function effectiveTtl(): ?int
     {

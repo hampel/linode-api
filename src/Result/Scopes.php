@@ -17,12 +17,12 @@ namespace Hampel\Linode\Api\Result;
  * READ-WRITE IMPLIES READ-ONLY. `domains:read_write` satisfies a `domains:read_only`
  * requirement, and allows() knows that; a string comparison against the header would not.
  *
- * WHAT IS MEASURED AND WHAT IS NOT. The header's presence and its `unknown` value on an
- * unauthenticated request were measured against the live API on 12 September 2026. The
- * SEPARATOR between multiple scopes was not - that needs a real token, and none was
- * available when this was written. So parsing accepts commas, whitespace or both, which
- * covers every form the header could plausibly take, and the `verify` harness exercise
- * prints the raw header so the first run against a real token settles it.
+ * WHAT IS MEASURED AND WHAT IS NOT. The header's presence, and the `unknown` it carries for a
+ * request with no usable credential, were measured against the live API on 12 September 2026.
+ * The SEPARATOR between multiple scopes was not: every token observed so far has held a
+ * single scope, so there has been nothing to separate. Parsing therefore accepts commas,
+ * whitespace or both, which covers every form the header could plausibly take, and the
+ * `verify` harness exercise prints the raw header so a multi-scope token settles it.
  */
 final class Scopes implements \JsonSerializable, \Stringable
 {
