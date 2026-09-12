@@ -531,12 +531,13 @@ up in a service provider of your own.
 
 ## Versioning and support
 
-`^0.2` is the constraint to write. PHP 8.3 or later.
+`^0.3` is the constraint to write. PHP 8.3 or later.
 
-**This is 0.x, so the public API can change in a minor release** — and one already has: `0.2.0`
-made an empty-bodied `200` raise rather than resolve to an empty response. Composer's caret
-pins to the minor below 1.0, so `^0.2` is `>=0.2.0 <0.3.0` and the next minor will not arrive
-unasked. Read the CHANGELOG before widening it.
+**This is 0.x, so the public API can change in a minor release**, and two already have: `0.2.0`
+made an empty-bodied `200` raise rather than resolve to an empty response, and `0.3.0` gave
+`DomainRecord::effectiveTtl()` a parameter. Composer's caret pins to the minor below 1.0, so
+`^0.3` is `>=0.3.0 <0.4.0` and the next minor will not arrive unasked. Read the CHANGELOG
+before widening it.
 
 Two questions about Linode's own behaviour are still open, neither of which touches a
 signature — which is why the package is not 1.0.0 yet:
