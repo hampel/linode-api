@@ -1,11 +1,16 @@
 CHANGELOG
 =========
 
-Unreleased
-----------
+0.2.0 (2026-09-13)
+------------------
 
-* an empty-bodied `200` now raises `MalformedResponseException`. Only a `204` is treated as a
-  success with no body
+**Breaking, hence 0.2.0 rather than 0.1.1:** code that relied on an empty-bodied `200`
+resolving to an empty response now gets an exception.
+
+* an empty-bodied `200` raises `MalformedResponseException`. Only a `204` is a success with no
+  body, which on this API is `GET /v4/profile/grants` for an unrestricted user
+* a successful `DELETE` answers `200` with a body of `{}`, so it decodes like any other
+  response and is unaffected
 
 0.1.0 (2026-09-13)
 ------------------
