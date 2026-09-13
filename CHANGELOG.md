@@ -1,8 +1,8 @@
 CHANGELOG
 =========
 
-Unreleased
-----------
+0.3.1 (2026-09-13)
+------------------
 
 * documents the `X-OAuth-Scopes` separator as a single space, and why `Scopes::fromHeader()`
   accepts a comma anyway. No behaviour change
