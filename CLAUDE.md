@@ -156,6 +156,22 @@ read off the live API on 12 September 2026.
   `X-Spec-Version: 4.235.1` against a document at 4.215.0.
 - **Linode's DNS has no SSHFP, TLSA, NAPTR, DNSKEY or DS.** `RecordType` is the complete set.
 
+## The API is stable from 1.0.0, so widening is the only free change
+
+A break in any class, method or signature outside `tests/` and `harness/` is now `2.0.0`.
+Widening is not a break: adding an optional parameter, or accepting `Domain|int` where an
+`int` was taken, is additive and belongs in a minor.
+
+**One known asymmetry is deliberately left for a minor.** `Domains::records()` accepts
+`Domain|int`; `get()`, `find()`, `update()`, `delete()`, `zoneFile()` and `cloneTo()` take an
+`int`. Widening those is the obvious 1.1.0 and was kept out of 1.0.0 on purpose - the house
+convention is that 1.0.0 declares stability over code that has already shipped and been
+exercised, not over something written for the occasion. `src/` at 1.0.0 is byte-identical to
+`0.3.1`.
+
+Adding a case to `RecordType`, `DomainType`, `DomainStatus` or `CaaTag` is a MAJOR, because an
+exhaustive `match` in a consumer throws `UnhandledMatchError` the day it lands.
+
 ## The constraint to write is the one sentence a release can make harmful
 
 Most documentation goes stale. **A README that tells a reader what to pin states a fact a

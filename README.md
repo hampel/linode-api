@@ -531,32 +531,25 @@ up in a service provider of your own.
 
 ## Versioning and support
 
-`^0.3` is the constraint to write. PHP 8.3 or later.
+`^1.0` is the constraint to write. PHP 8.3 or later.
 
-**This is 0.x, so the public API can change in a minor release**, and two already have: `0.2.0`
-made an empty-bodied `200` raise rather than resolve to an empty response, and `0.3.0` gave
-`DomainRecord::effectiveTtl()` a parameter. Composer's caret pins to the minor below 1.0, so
-`^0.3` is `>=0.3.0 <0.4.0` and the next minor will not arrive unasked. Read the CHANGELOG
-before widening it.
-
-One question about Linode's own behaviour is still open, and it does not touch a signature:
-
-- **A restricted user's grants** are covered by the test suite and have not been exercised
-  against a real restricted account.
-
-1.0.0 follows once those close. From it, a break in any class, method or signature outside
-`tests/` and `harness/` means a new major. Two things will be worth knowing then, and are
-worth knowing now:
+**The public API is stable.** A break in any class, method or signature outside `tests/` and
+`harness/` means `2.0.0`. Two consequences of that are worth knowing before you rely on them:
 
 - **`RecordType`, `DomainType`, `DomainStatus` and `CaaTag` are enums, so an exhaustive
-  `match` over one throws `UnhandledMatchError` the day a case is added.** Write a `default`
-  arm.
+  `match` over one throws `UnhandledMatchError` the day a case is added.** Adding a case is
+  therefore a major here — but write a `default` arm anyway.
 - **`ApiException::$statusCode`, `$errors`, `$body`, `$retryAfter` and `$meta` are the
   supported surface.** What is inside one of Linode's error objects, and the shape of an
-  entity's `raw`, are the API's and are not.
+  entity's `raw`, are the API's rather than this package's and are not covered.
 
 Entities serialise to the payload the API sent, unchanged, so a field added to the API after
 a release is reachable through `$entity->raw` without waiting for one.
+
+**One question about Linode's own behaviour is still open**, and it cannot move a signature: a
+restricted user's grants are covered by the test suite and have not been exercised against a
+real restricted account. The trap in that endpoint — the `204` it answers for an *unrestricted*
+user — is measured.
 
 ## License
 

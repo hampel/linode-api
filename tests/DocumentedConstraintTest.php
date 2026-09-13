@@ -52,9 +52,15 @@ final class DocumentedConstraintTest extends BaseTestCase
 
         preg_match_all('/`(\^\d+\.\d+)` is `>=/', $readme, $matches);
 
-        foreach ($matches[1] as $explained) {
-            $this->assertSame($expected, $explained, 'the caret example names a superseded minor');
-        }
+        // Asserted as a set rather than in a loop. A loop over no matches runs no assertion at
+        // all, and PHPUnit reports that as risky rather than passing - which is correct, and is
+        // how this was caught going vacuous the moment the README stopped carrying an example.
+        // There need not be one; if there is, it must not name a superseded minor.
+        $this->assertSame(
+            [],
+            array_values(array_diff(array_unique($matches[1]), [$expected])),
+            'a caret example in the README names a constraint other than the current one'
+        );
     }
 
     /**

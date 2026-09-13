@@ -1,6 +1,14 @@
 CHANGELOG
 =========
 
+1.0.0 (2026-09-13)
+------------------
+
+**The public API is declared stable.** A breaking change from here means `2.0.0`. The
+constraint to write is `^1.0`.
+
+* no functional change: `src/` is byte-identical to `0.3.1`
+
 0.3.1 (2026-09-13)
 ------------------
 
