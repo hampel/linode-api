@@ -10,19 +10,32 @@ namespace Hampel\Linode\Api\Result;
  * Linode sends this on EVERY response, success or failure, so the answer to "what may this
  * credential do" comes back free with the first call rather than needing one of its own.
  *
- * A scope is `<area>:<access>` - `domains:read_write`, `account:read_only` - and `*` means
- * everything, which is what an unrestricted personal access token created with full access
- * reports.
+ * A scope is `<area>:<access>` - `domains:read_write`, `account:read_only`.
+ *
+ * `*` IS TREATED AS "EVERYTHING", AND THAT HALF IS NOT MEASURED. Every observation of `*` so
+ * far has been in `X-Accepted-OAuth-Scopes`, where it means "any scope will do for this
+ * endpoint" - `GET /v4/profile` answers that, being reachable by any credential. Whether a
+ * TOKEN's own header ever reports `*` would need a full-access token to find out, and none has
+ * been made for the purpose. isUnrestricted() is therefore a reasonable reading of a value
+ * that may never arrive on that header.
  *
  * READ-WRITE IMPLIES READ-ONLY. `domains:read_write` satisfies a `domains:read_only`
  * requirement, and allows() knows that; a string comparison against the header would not.
  *
- * WHAT IS MEASURED AND WHAT IS NOT. The header's presence, and the `unknown` it carries for a
- * request with no usable credential, were measured against the live API on 12 September 2026.
- * The SEPARATOR between multiple scopes was not: every token observed so far has held a
- * single scope, so there has been nothing to separate. Parsing therefore accepts commas,
- * whitespace or both, which covers every form the header could plausibly take, and the
- * `verify` harness exercise prints the raw header so a multi-scope token settles it.
+ * THE SEPARATOR IS A SINGLE SPACE, measured on 2026-09-13 with a token holding two scopes:
+ *
+ *     X-OAuth-Scopes: images:read_only volumes:read_only
+ *
+ * No comma. Parsing nonetheless still accepts commas as well, and that is a decision rather
+ * than a leftover from before it was known. Splitting on whitespace alone would be correct
+ * today and would fail SILENTLY if Linode ever moved to a comma form: the whole header would
+ * parse as one scope named `images:read_only,volumes:read_only`, `allows()` would answer false
+ * for everything the token actually holds, and a caller checking its scopes at startup would
+ * refuse to run with no indication why. A tolerant split costs one character in a regex and
+ * cannot produce that.
+ *
+ * The header's presence, and the `unknown` it carries for a request with no usable credential,
+ * were measured on 2026-09-12.
  */
 final class Scopes implements \JsonSerializable, \Stringable
 {

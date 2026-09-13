@@ -110,6 +110,12 @@ read off the live API on 12 September 2026.
   from 3600 to 7200 moved its `ttl_sec: 0` records inside 30 seconds, read off the
   authoritative nameserver. `DomainRecord::effectiveTtl()` takes the zone to resolve it, and
   still answers null without one.
+- **`X-OAuth-Scopes` separates multiple scopes with a SINGLE SPACE** - measured on 2026-09-13
+  with a two-scope token: `images:read_only volumes:read_only`, no comma. `Scopes::fromHeader()`
+  splits on commas as well anyway, deliberately: whitespace-only would be correct today and
+  would fail silently if Linode moved to a comma, parsing the whole header as one scope so that
+  `allows()` answered false for everything the token holds. `SupportTest` pins both the measured
+  form and the tolerance, so neither can be tightened away.
 - **`dig` against `ns1.linode.com` is a far better instrument than the zone-file endpoint.**
   DNS reflected a zone TTL change in 30 seconds where the rendered zone file took minutes and
   once had not caught up after 160. For anything about what is actually SERVED, query the
@@ -237,8 +243,10 @@ does: when the API changes, both stay agreed with each other and disagreed with 
 harness is the only instrument that can see that, which is the whole argument for it being
 assertion-free and run by a person.
 
-Two things are still unverified against a live account, and both are noted in the CHANGELOG:
-the separator in the `X-OAuth-Scopes` header, and a restricted user's grants.
+One thing is still unverified against a live account and is noted in the CHANGELOG: a
+restricted user's grants. `Scopes::isUnrestricted()` reads `*` as "everything", which is also
+unverified in one direction - `*` has only ever been seen in `X-Accepted-OAuth-Scopes`, and
+whether a token's OWN header ever carries it would need a full-access token to find out.
 
 ### A test that pins one outcome of a branch says nothing about the others
 

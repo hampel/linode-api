@@ -539,11 +539,8 @@ made an empty-bodied `200` raise rather than resolve to an empty response, and `
 `^0.3` is `>=0.3.0 <0.4.0` and the next minor will not arrive unasked. Read the CHANGELOG
 before widening it.
 
-Two questions about Linode's own behaviour are still open, neither of which touches a
-signature — which is why the package is not 1.0.0 yet:
+One question about Linode's own behaviour is still open, and it does not touch a signature:
 
-- **The separator between multiple scopes in `X-OAuth-Scopes`.** Parsing accepts commas,
-  whitespace or both until a multi-scope token settles it.
 - **A restricted user's grants** are covered by the test suite and have not been exercised
   against a real restricted account.
 

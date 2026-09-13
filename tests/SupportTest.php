@@ -236,13 +236,40 @@ final class SupportTest extends BaseTestCase
         Page::assertValidPageSize(501);
     }
 
-    public function test_scopes_parse_whether_they_are_separated_by_spaces_or_commas(): void
+    /**
+     * The form the live API actually sends, measured on 2026-09-13 with a two-scope token:
+     * a single space, no comma.
+     */
+    public function test_the_measured_header_form_is_space_separated(): void
     {
-        foreach (['domains:read_write account:read_only', 'domains:read_write,account:read_only', 'domains:read_write, account:read_only'] as $header) {
-            $scopes = Scopes::fromHeader($header);
+        $scopes = Scopes::fromHeader('images:read_only volumes:read_only');
 
-            $this->assertSame(['domains:read_write', 'account:read_only'], $scopes->scopes, $header);
+        $this->assertSame(['images:read_only', 'volumes:read_only'], $scopes->scopes);
+    }
+
+    /**
+     * The comma forms are not what Linode sends, and parsing keeps accepting them on purpose.
+     * Splitting on whitespace alone would fail silently if the API ever moved to a comma: the
+     * header would become one scope with a comma in its name and `allows()` would answer false
+     * for everything the token holds. This is the test that stops someone tightening it.
+     */
+    public function test_a_comma_form_would_still_parse_if_linode_ever_sent_one(): void
+    {
+        foreach (['a:read_write,b:read_only', 'a:read_write, b:read_only'] as $header) {
+            $this->assertSame(['a:read_write', 'b:read_only'], Scopes::fromHeader($header)->scopes, $header);
         }
+    }
+
+    /**
+     * What tightening would cost, stated as an assertion rather than as a comment: a header
+     * split the wrong way yields one nonsense scope and a token that appears to hold nothing.
+     */
+    public function test_an_unsplit_header_would_report_a_token_as_holding_nothing_it_has(): void
+    {
+        $mangled = Scopes::fromHeader('images:read_onlyvolumes:read_only');
+
+        $this->assertFalse($mangled->allows('images:read_only'));
+        $this->assertFalse($mangled->isUnknown(), 'and it would not even look unanswered');
     }
 
     public function test_read_write_satisfies_a_read_only_requirement_and_not_the_other_way(): void
