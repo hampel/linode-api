@@ -111,11 +111,12 @@ read off the live API on 12 September 2026.
   authoritative nameserver. `DomainRecord::effectiveTtl()` takes the zone to resolve it, and
   still answers null without one.
 - **`X-OAuth-Scopes` separates multiple scopes with a SINGLE SPACE** - measured on 2026-09-13
-  with a two-scope token: `images:read_only volumes:read_only`, no comma. `Scopes::fromHeader()`
-  splits on commas as well anyway, deliberately: whitespace-only would be correct today and
-  would fail silently if Linode moved to a comma, parsing the whole header as one scope so that
-  `allows()` answered false for everything the token holds. `SupportTest` pins both the measured
-  form and the tolerance, so neither can be tightened away.
+  with a two-scope token: `images:read_only volumes:read_only`, no comma.
+  `Scopes::fromHeader()` splits on commas as well anyway, deliberately: whitespace-only would
+  be correct today and would fail silently if Linode moved to a comma, parsing the whole
+  header as one scope so that `allows()` answered false for everything the token holds.
+  `SupportTest` pins both the measured form and the tolerance, so neither can be tightened
+  away.
 - **`dig` against `ns1.linode.com` is a far better instrument than the zone-file endpoint.**
   DNS reflected a zone TTL change in 30 seconds where the rendered zone file took minutes and
   once had not caught up after 160. For anything about what is actually SERVED, query the
@@ -162,12 +163,18 @@ A break in any class, method or signature outside `tests/` and `harness/` is now
 Widening is not a break: adding an optional parameter, or accepting `Domain|int` where an
 `int` was taken, is additive and belongs in a minor.
 
-**One known asymmetry is deliberately left for a minor.** `Domains::records()` accepts
-`Domain|int`; `get()`, `find()`, `update()`, `delete()`, `zoneFile()` and `cloneTo()` take an
-`int`. Widening those is the obvious 1.1.0 and was kept out of 1.0.0 on purpose - the house
-convention is that 1.0.0 declares stability over code that has already shipped and been
-exercised, not over something written for the occasion. `src/` at 1.0.0 is byte-identical to
-`0.3.1`.
+**Widened in 1.1.0, and the criterion is not symmetry.** `update()`, `delete()`,
+`zoneFile()`, `cloneTo()` and `records()` take `Domain|int` because they act on a zone the
+caller already holds. `get()` and `find()` take an `int` and are deliberately left alone:
+they PRODUCE a Domain, so accepting one would be a round trip to fetch what the caller is
+holding, and a uniform surface is not worth inviting that. `DomainsTest` pins both halves,
+the second by reflection so it cannot drift back.
+
+The friction is in the type system rather than the typing, which is why it was worth
+fixing: `findByName()` answers `?Domain` and `Domain::$id` is `?int` in its own right, so
+narrowing away the first null does not narrow away the second, and `update($zone->id, ...)`
+fails level 10 after a correct null check. Measured with PHPStan over three realistic flows
+by the first consumer, and reproduced here before acting on it.
 
 Adding a case to `RecordType`, `DomainType`, `DomainStatus` or `CaaTag` is a MAJOR, because an
 exhaustive `match` in a consumer throws `UnhandledMatchError` the day it lands.

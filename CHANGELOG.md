@@ -1,6 +1,13 @@
 CHANGELOG
 =========
 
+Unreleased
+----------
+
+* `Domains::update()`, `delete()`, `zoneFile()` and `cloneTo()` accept a `Domain` as well as an
+  id, so a `findByName()` result feeds straight into them. `get()` and `find()` are unchanged
+  and take an id
+
 1.0.0 (2026-09-13)
 ------------------
 

@@ -153,11 +153,14 @@ final class Domains extends Endpoint
      *
      * @param  Domain|array<string, mixed>  $changes
      */
-    public function update(int $id, Domain|array $changes): Domain
+    public function update(Domain|int $id, Domain|array $changes): Domain
     {
         $payload = $changes instanceof Domain ? $changes->toArray() : $changes;
 
-        $this->logger->info('Linode domain update', ['id' => $id, 'fields' => array_keys($payload)]);
+        $this->logger->info('Linode domain update', [
+            'id' => $this->zoneId($id),
+            'fields' => array_keys($payload),
+        ]);
 
         return Domain::fromArray($this->apiPut($this->path($id), $payload)->object());
     }
@@ -173,9 +176,9 @@ final class Domains extends Endpoint
      * was not there raises NotFoundException rather than passing quietly, because "delete
      * something that does not exist" is far more often a wrong id than an idempotent retry.
      */
-    public function delete(int $id): void
+    public function delete(Domain|int $id): void
     {
-        $this->logger->warning('Linode domain delete', ['id' => $id]);
+        $this->logger->warning('Linode domain delete', ['id' => $this->zoneId($id)]);
 
         $this->apiDelete($this->path($id));
     }
@@ -194,9 +197,10 @@ final class Domains extends Endpoint
      */
     public function records(Domain|int $domain): BoundDomainRecords
     {
-        $domainId = $domain instanceof Domain ? $domain->requireId() : $domain;
-
-        return new BoundDomainRecords(new DomainRecords($this->connection, $this->logger), $domainId);
+        return new BoundDomainRecords(
+            new DomainRecords($this->connection, $this->logger),
+            $this->zoneId($domain)
+        );
     }
 
     /**
@@ -226,9 +230,9 @@ final class Domains extends Endpoint
      * allow the method, and every reader would have to check whether the call was a method
      * or an operator.
      */
-    public function cloneTo(int $id, string $newDomain): Domain
+    public function cloneTo(Domain|int $id, string $newDomain): Domain
     {
-        $this->logger->info('Linode domain clone', ['id' => $id, 'domain' => $newDomain]);
+        $this->logger->info('Linode domain clone', ['id' => $this->zoneId($id), 'domain' => $newDomain]);
 
         return Domain::fromArray($this->apiPost($this->path($id) . '/clone', [
             'domain' => $newDomain,
@@ -244,7 +248,7 @@ final class Domains extends Endpoint
      *
      * @return list<string>
      */
-    public function zoneFile(int $id): array
+    public function zoneFile(Domain|int $id): array
     {
         $response = $this->apiGet($this->path($id) . '/zone-file');
         $lines = [];
@@ -258,8 +262,29 @@ final class Domains extends Endpoint
         return $lines;
     }
 
-    private function path(int $id): string
+    /**
+     * A zone id from either form.
+     *
+     * WIDENED ON THE METHODS THAT ACT ON A ZONE YOU ALREADY HOLD, and deliberately not on
+     * get() or find(). Those PRODUCE a Domain; passing one to them would be a round trip to
+     * fetch what the caller is already holding, and a uniform surface is not worth inviting
+     * that. The four that consume one - update(), delete(), zoneFile(), cloneTo() - are where
+     * the flow actually lands.
+     *
+     * The friction this removes is in the type system rather than in the typing. findByName()
+     * answers `?Domain` and `Domain::$id` is `?int` in its own right, because a zone built
+     * locally has no id - so narrowing away the first null does NOT narrow away the second,
+     * and a caller who has done the null check correctly still meets `expects int, int|null
+     * given` at level 10. Measured with PHPStan over the three realistic flows, and reported
+     * by the first consumer.
+     */
+    private function zoneId(Domain|int $domain): int
     {
-        return 'domains/' . $id;
+        return $domain instanceof Domain ? $domain->requireId() : $domain;
+    }
+
+    private function path(Domain|int $id): string
+    {
+        return 'domains/' . $this->zoneId($id);
     }
 }

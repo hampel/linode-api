@@ -157,6 +157,25 @@ $linode->domains()->create(Domain::slave('example.com', ['203.0.113.1']));
 id is what the API wants. **A domain is unique across the whole of Linode**, not just across
 your account, so at most one thing can come back.
 
+**The methods that act on a zone take the zone itself**, so a lookup feeds straight into what
+follows — `update()`, `delete()`, `zoneFile()`, `cloneTo()` and `records()` all accept a
+`Domain` or an id. `get()` and `find()` take an id only, on purpose: they *produce* a `Domain`,
+so passing one in would be a round trip to fetch what you already hold.
+
+```php
+$zone = $linode->domains()->findByName('example.com');
+
+if ($zone !== null) {
+    $linode->domains()->update($zone, ['ttl_sec' => 300]);
+}
+```
+
+That is worth more than symmetry. `findByName()` answers `?Domain`, and `Domain::$id` is
+`?int` in its own right because a zone built locally has no id — so narrowing away the first
+null does not narrow away the second, and `update($zone->id, …)` fails static analysis even
+after a correct null check. `$zone->requireId()` is the alternative and this is the shorter
+one.
+
 ### Updating, and the PUT that is really a PATCH
 
 Every write on this API is a `PUT`, and every one of them applies only the fields it is given.
@@ -170,7 +189,7 @@ API sends everything it has:
 $linode->domains()->update($id, ['ttl_sec' => 3600]);                 // one field
 
 $domain = $linode->domains()->get($id);
-$linode->domains()->update($id, $domain->disabled());                 // every field, with status changed
+$linode->domains()->update($domain, $domain->disabled());             // every field, with status changed
 ```
 
 The smaller request is also the one that cannot overwrite a change somebody else made in

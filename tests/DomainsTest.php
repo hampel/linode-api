@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace Hampel\Linode\Api\Tests;
 
+use Hampel\Linode\Api\Endpoint\Domains;
 use Hampel\Linode\Api\Entity\Domain;
 use Hampel\Linode\Api\Enum\DomainStatus;
 use Hampel\Linode\Api\Enum\DomainType;
@@ -331,6 +332,73 @@ final class DomainsTest extends TestCase
         $this->expectExceptionMessage('has no id');
 
         $this->linode()->domains()->records($local);
+    }
+
+    /**
+     * The four methods that act on a zone you already hold take the zone itself.
+     *
+     * The friction this removes is in the type system rather than in the typing: findByName()
+     * answers `?Domain` and `Domain::$id` is `?int` in its own right, so narrowing away the
+     * first null does not narrow away the second, and a caller who has done the null check
+     * correctly still meets `expects int, int|null given` at PHPStan level 10. Reported and
+     * measured by the first consumer. PHPStan analyses this file, so these calls are the
+     * assertion that the signatures accept a Domain.
+     */
+    public function test_the_consuming_methods_take_a_domain_as_readily_as_an_id(): void
+    {
+        $this->client->pushJson(200, $this->collection([$this->row()]));
+        $zone = $this->linode()->domains()->findByName('example.com');
+
+        $this->assertNotNull($zone);
+
+        $this->client->pushJson(200, $this->row());
+        $this->assertSame(1234, $this->linode()->domains()->update($zone, ['ttl_sec' => 300])->id);
+        $this->assertSame('/v4/domains/1234', $this->sentPath());
+
+        $this->client->pushJson(200, []);
+        $this->linode()->domains()->delete($zone);
+        $this->assertSame('/v4/domains/1234', $this->sentPath());
+
+        $this->client->pushJson(200, ['zone_file' => ['; example.com']]);
+        $this->assertCount(1, $this->linode()->domains()->zoneFile($zone));
+        $this->assertSame('/v4/domains/1234/zone-file', $this->sentPath());
+
+        $this->client->pushJson(200, $this->row('example.net', 9999));
+        $this->assertSame(9999, $this->linode()->domains()->cloneTo($zone, 'example.net')->id);
+        $this->assertSame('/v4/domains/1234/clone', $this->sentPath());
+    }
+
+    /**
+     * get() and find() are NOT widened, deliberately. They produce a Domain; passing one in
+     * would be a round trip to fetch what the caller already holds, and a uniform surface is
+     * not worth inviting that. Asserted by reflection so the decision cannot drift back.
+     */
+    public function test_the_producing_methods_are_deliberately_not_widened(): void
+    {
+        foreach (['get', 'find'] as $method) {
+            $type = (new \ReflectionMethod(Domains::class, $method))->getParameters()[0]->getType();
+
+            $this->assertInstanceOf(\ReflectionNamedType::class, $type, $method);
+            $this->assertSame('int', $type->getName(), $method . '() should take an id, not a zone');
+        }
+    }
+
+    /**
+     * A zone built locally has no id, so the widened methods raise where the object cannot
+     * name a record at Linode - rather than sending "domains/" and getting a confusing 404.
+     */
+    public function test_a_zone_that_was_never_created_is_refused_by_the_widened_methods(): void
+    {
+        $local = Domain::master('example.com', 'h@example.com');
+
+        $this->expectException(RuntimeException::class);
+        $this->expectExceptionMessage('has no id');
+
+        try {
+            $this->linode()->domains()->delete($local);
+        } finally {
+            $this->assertSame([], $this->client->requests, 'and nothing was sent');
+        }
     }
 
     public function test_it_imports_a_zone_by_transfer(): void
