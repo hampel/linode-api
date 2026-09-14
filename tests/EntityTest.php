@@ -300,7 +300,8 @@ final class EntityTest extends BaseTestCase
 
         $this->assertNull($domain->type);
         $this->assertSame('secondary', $domain->raw['type']);
-        $this->assertFalse($domain->isMaster());
+        $this->assertFalse($domain->isMaster(), 'false for an unmodelled type - which is not the same as slave');
+        $this->assertNotSame(\Hampel\Linode\Api\Enum\DomainType::Slave, $domain->type);
         $this->assertArrayNotHasKey('type', $domain->withTtl(300)->toArray());
     }
 

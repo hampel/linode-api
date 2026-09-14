@@ -12,6 +12,8 @@ failures are no longer logged.
 * `find()`, `findByName()` and `Account::find()` log nothing when there is nothing to find
 * an unknown record type reads as `null` rather than `A`, and an unknown domain type as `null`
   rather than `Master`. The original stays in `raw['type']`
+* `Domain::isMaster()` is `false` for an unknown domain type, where it was `true`. `false` no longer
+  implies a slave zone
 * `DomainRecord::typeName()` returns the type's name, modelled or not
 * `DomainRecord::toArray()` raises for a record whose type is not modelled
 * `Domains::findByName()` raises `UnexpectedResponseException` when Linode answers the filtered

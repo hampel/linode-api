@@ -113,7 +113,7 @@ final class Domain implements \JsonSerializable
     {
         $domain = Cast::string($row['domain'] ?? null) ?? '';
         // Null for a type DomainType does not model, never a guess - reading an unknown one as
-        // `Master`, as this did, would have claimed Linode is authoritative for a zone it may not be.
+        // `Master`, as this did, claimed Linode is authoritative for a zone it may not be.
         $type = DomainType::tryFrom(Cast::string($row['type'] ?? null) ?? '');
 
         return new self(
@@ -328,6 +328,14 @@ final class Domain implements \JsonSerializable
         return $this->id;
     }
 
+    /**
+     * Whether Linode is authoritative for this zone.
+     *
+     * FALSE DOES NOT MEAN SLAVE. A zone of a type DomainType does not model has a null `$type`, so
+     * this answers false for it too, and `isMaster() ? ... : ...` labels it a slave. Where the
+     * difference matters, compare `$type` against `DomainType::Slave` and handle null as its own
+     * case - `raw['type']` has what Linode sent.
+     */
     public function isMaster(): bool
     {
         return $this->type === DomainType::Master;
