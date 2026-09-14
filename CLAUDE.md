@@ -79,8 +79,10 @@ read off the live API on 12 September 2026.
 - **Filtering is a request HEADER, not a query string.** `X-Filter` carries a JSON object.
   There is no `?domain=example.com` on this API.
 - **A filter that stopped being honoured would be a silent success**, not an error: a 200
-  carrying the whole collection. `findByName()` therefore re-checks the name it got back, and
-  the `filtering` exercise compares a filtered count against an unfiltered one, which is a
+  carrying the whole collection. `findByName()` therefore re-checks the name it got back and
+  raises `UnexpectedResponseException` on a page that lacks it - not null, since null would
+  claim the zone does not exist when all that is known is that the question went unanswered.
+  The `filtering` exercise compares a filtered count against an unfiltered one, which is a
   question a mocked suite cannot ask - the mock honours the filter by construction.
 - **`page_size` below 25 is a 400** — *measured*, `{"field":"page_size","reason":"Must be
   25-500"}`. Surprising to anyone who has asked another API for one item to see the shape of
@@ -157,9 +159,35 @@ read off the live API on 12 September 2026.
   `X-Spec-Version: 4.235.1` against a document at 4.215.0.
 - **Linode's DNS has no SSHFP, TLSA, NAPTR, DNSKEY or DS.** `RecordType` is the complete set.
 
+## A failure is raised, never logged
+
+**Nothing is logged above `debug`**, and `LoggingTest` pins it. Whether an exception is a failure
+is decided by whoever catches it, and this package catches some of its own: `apiFind()` turns a
+404 into null, `Account::find()` turns a scope refusal into null. Until 1.2.0 `Connection` logged
+every non-2xx at `error` before throwing, so a `find()` for a zone that was not there paged
+whoever routes error logs to an alerting channel, and a caller that logged what it caught
+recorded each failure twice. Writes were logged too, a delete at `warning`. Reported by a
+consumer on 2026-09-14; `hampel/binarylane-api` had removed the same thing that day, and the two
+now agree.
+
+A condition that is a fault but is not otherwise raised gets an exception rather than a log
+line - `findByName()`'s ignored filter is the case, and it raises `UnexpectedResponseException`.
+
+**An unmodelled type is null, never a guess.** `DomainRecord::$type` and `Domain::$type` are
+nullable and keep the original in `raw`. Until 1.2.0 an unknown record type read as `A` and an
+unknown domain type as `Master`, with a test asserting the first. A record of an unmodelled type
+raises from `toArray()`, because which fields it may carry is the unknown; a domain's type
+governs nothing else, so it is omitted from the write instead.
+
 ## The API is stable from 1.0.0, so widening is the only free change
 
 A break in any class, method or signature outside `tests/` and `harness/` is now `2.0.0`.
+
+**1.2.0 is the recorded exception.** It made `$type` nullable and stopped logging failures,
+both breaking, and shipped as a minor deliberately on 2026-09-14: the package was two days old
+and had no consumers outside its author's own applications. Do not read it as precedent - the
+next break is `2.0.0`.
+
 Widening is not a break: adding an optional parameter, or accepting `Domain|int` where an
 `int` was taken, is additive and belongs in a minor.
 

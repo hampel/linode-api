@@ -60,9 +60,11 @@ $factory = new HttpFactory();   // PSR-17, fills both the request and stream rol
 $linode = new Client(new Config(), new AccessToken('MY-TOKEN'), new Guzzle(), $factory, $factory, $logger);
 ```
 
-Requests are logged at `debug`, failures at `error`, and a nearly-spent rate limit at
-`warning`. The token is never logged: `AccessToken::describe()` prints its length and last
-four characters and nothing else.
+**Nothing is logged above `debug`.** Requests are logged there, and so is a nearly-spent rate
+limit; a failure is raised rather than logged. So an application that logs what it catches
+records each failure once, and a `find()` that finds nothing records nothing at all. The token
+is never logged: `AccessToken::describe()` prints its length and last four characters and
+nothing else.
 
 ## Does this token work?
 
@@ -249,6 +251,12 @@ Four traps live in these, and each is why the constructor looks the way it does:
 - **Nothing stops a duplicate.** Linode will hold two identical A records for one name and
   DNS will serve both. `named()` first, where that matters.
 
+**A type this package does not model reads as `null`**, never as a guess. The original is in
+`raw['type']`, and `typeName()` returns it either way. Such a record can be read but not written
+back, because the fields its type may carry are unknown here — `toArray()` raises, and an array
+passed to `create()` or `update()` is the way through. An unmodelled *domain* type is also
+`null`, and is left out of a write, which leaves the zone's type as it was.
+
 ### TTLs are rounded up, silently
 
 Linode accepts a fixed list of intervals — 0, 30, 120, 300, 3600, 7200, 14400, 28800, 57600,
@@ -362,6 +370,7 @@ consumer catches what it can act on instead of matching on a message:
 | `TooManyRequestsException` | 429 | rate limited, and the only thing that means so |
 | `ServerException` | 5xx | Linode failed; a retry is reasonable |
 | `MalformedResponseException` | 2xx | success, with a body that is not JSON |
+| `UnexpectedResponseException` | 2xx | success, answering a different question — a filtered lookup Linode did not filter |
 | `RequestException` | — | the request never got an answer: DNS, TLS, a timeout |
 
 All but the last extend `ApiException`; all of them implement `ExceptionInterface`.

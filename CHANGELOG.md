@@ -1,6 +1,23 @@
 CHANGELOG
 =========
 
+1.2.0 (2026-09-14)
+------------------
+
+**Breaking, released as a minor:** `DomainRecord::$type` and `Domain::$type` are nullable, and
+failures are no longer logged.
+
+* nothing is logged above `debug`. Rejected requests, transport failures and bodies that are not
+  JSON were logged at `error` before being raised, and writes at `info` or `warning`
+* `find()`, `findByName()` and `Account::find()` log nothing when there is nothing to find
+* an unknown record type reads as `null` rather than `A`, and an unknown domain type as `null`
+  rather than `Master`. The original stays in `raw['type']`
+* `DomainRecord::typeName()` returns the type's name, modelled or not
+* `DomainRecord::toArray()` raises for a record whose type is not modelled
+* `Domains::findByName()` raises `UnexpectedResponseException` when Linode answers the filtered
+  lookup with other zones, where it logged a warning and returned `null`
+* the README links `hampel/linode-api-laravel`, which it described as unreleased
+
 1.1.0 (2026-09-13)
 ------------------
 
