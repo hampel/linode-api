@@ -129,8 +129,8 @@ read off the live API on 12 September 2026.
   what is SERVED, which is why it lags. Do not diff it to confirm an edit landed; read the
   record endpoint. Any harness probe reading it has to wait for convergence rather than break
   on the first sight of what it is looking for - the `records` exercise did exactly that once
-  and manufactured a false reading. It is also why the ttl-0 question is still open: the
-  probe is correct now and the file simply does not settle inside a reasonable ceiling.
+  and manufactured a false reading. For anything about what is served, query the nameserver
+  instead - see the `dig` bullet above.
 - **SRV takes its service and protocol undecorated.** Linode prepends the underscore and
   appends the period itself, so `_sip` becomes `__sip` and matches nothing, with no error.
   `DomainRecord::srv()` refuses a leading underscore. SRV also has no `name` of its own -
@@ -255,38 +255,6 @@ run — never in `.env`, because a persisted authorisation is one nobody gave. S
 **If an exercise fails for want of a credential, that is the guard working.** The rig does not
 load `.env` in an agent session. Do not go looking for the token.
 
-## What the live runs settled, 12 September 2026
-
-Against a real account with a `domains:read_write` token, all four read-only exercises green:
-
-- `verify` — the token check works end to end, and **found the 401-for-scope behaviour above
-  on its first run**, where the package had assumed 403 from the specification. That is the
-  case for the harness in one line: the suite was green throughout, because the stub agreed
-  with the code.
-- `X-OAuth-Scopes` carries **one scope per token here and no separator was observable**, so
-  `Result\Scopes` still splits on commas and whitespace. Not yet settled; a multi-scope token
-  would settle it.
-- `errors` — every status maps to the type the hierarchy claims: 401 Invalid Token, 400
-  page_size, 400 X-Filter, 404 for both a missing record and a missing path.
-- `filtering` — 170 zones unfiltered against 0 for a name that cannot exist, so the filter is
-  honoured. That account size also walks two pages, so `apiEach()` is exercised across a real
-  page boundary.
-- `domains` — 170 zones read and parsed, every one master/active.
-- `records` **has now been run**, and found the TTL rule above. It also confirmed that the
-  PUT really is partial - a ttl-only update left the target intact - and that a record is
-  readable from the record endpoint immediately after its create returns.
-
-**Two lessons from that run, both worth keeping:**
-
-- **Verify a restore, not just the restore call.** The exercise reported the zone TTL
-  restored and it was; reading the zone file afterwards showed 120 and a deleted record,
-  which looked like a botched cleanup and was actually the zone-file lag above. Checking the
-  API rather than the rendered file is what told the two apart.
-- **A probe that breaks on the first sight of its own marker reads the previous state.** The
-  ttl-0 probe did that, matched a stale line, and printed a confident-looking measurement
-  with `waited 0s`. It now settles on a distinctive value, waits for that to render, and only
-  then changes it and waits for the value to move.
-
 ## What the suite cannot tell you
 
 Every test drives a stubbed PSR-18 client, so the stub encodes the same assumptions the code
@@ -294,10 +262,15 @@ does: when the API changes, both stay agreed with each other and disagreed with 
 harness is the only instrument that can see that, which is the whole argument for it being
 assertion-free and run by a person.
 
-One thing is still unverified against a live account and is noted in the CHANGELOG: a
-restricted user's grants. `Scopes::isUnrestricted()` reads `*` as "everything", which is also
-unverified in one direction - `*` has only ever been seen in `X-Accepted-OAuth-Scopes`, and
-whether a token's OWN header ever carries it would need a full-access token to find out.
+One thing is still unverified against a live account: a restricted user's grants.
+`Scopes::isUnrestricted()` reads `*` as "everything", which is also unverified in one direction
+— `*` has only ever been seen in `X-Accepted-OAuth-Scopes`, and whether a token's OWN header
+ever carries it would need a full-access token to find out.
+
+**Verify a restore, not the restore call.** A harness exercise that changes real state and puts
+it back reports what the API answered to the restore. Read the state back through the API
+afterwards: a zone restored correctly once looked botched in the rendered zone file, which lags,
+and only the record endpoint told the two apart.
 
 ### A test that pins one outcome of a branch says nothing about the others
 
