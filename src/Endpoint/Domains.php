@@ -6,8 +6,10 @@ namespace Hampel\Linode\Api\Endpoint;
 
 use Hampel\Linode\Api\Entity\Domain;
 use Hampel\Linode\Api\Exception\InvalidArgumentException;
+use Hampel\Linode\Api\Exception\UnexpectedResponseException;
 use Hampel\Linode\Api\Result\Page;
 use Hampel\Linode\Api\Support\Filter;
+use Hampel\Linode\Api\Support\Json;
 
 /**
  * DNS zones.
@@ -94,6 +96,14 @@ final class Domains extends Endpoint
      * downstream then edits the wrong zone's DNS. A filter being ignored is a silent success,
      * so it is caught by confirming the answer rather than by trusting the request; the
      * `filtering` harness exercise is the other half of the same check.
+     *
+     * A page of zones that does not contain the name RAISES rather than answering null. Null
+     * would mean "no such zone", and that is not what is known: the zone could be on a later
+     * page of the unfiltered collection, and a caller that created it on the strength of a
+     * null would be refused with a 400 for a name that exists. What is known is that the API
+     * did not answer the question, and that is an exception.
+     *
+     * @throws UnexpectedResponseException  when the filter was not honoured
      */
     public function findByName(string $domain): ?Domain
     {
@@ -103,7 +113,8 @@ final class Domains extends Endpoint
             throw new InvalidArgumentException('A domain name is required to look one up.');
         }
 
-        $page = $this->list(1, Filter::where('domain', $domain));
+        $response = $this->apiGet('domains', ['page' => 1], Filter::where('domain', $domain));
+        $page = Page::fromResponse($response->data, Domain::fromArray(...));
 
         foreach ($page->items as $candidate) {
             if (strtolower(trim($candidate->domain, '. ')) === $domain) {
@@ -111,15 +122,24 @@ final class Domains extends Endpoint
             }
         }
 
-        if (!$page->isEmpty()) {
-            $this->logger->warning('Linode answered a filtered domain lookup with something else', [
-                'asked_for' => $domain,
-                'received' => array_map(static fn (Domain $item): string => $item->domain, $page->items),
-                'results' => $page->total,
-            ]);
+        if ($page->isEmpty()) {
+            return null;
         }
 
-        return null;
+        throw new UnexpectedResponseException(
+            sprintf(
+                'Linode answered a lookup filtered to domain "%s" with %d other zone(s), starting with '
+                    . '"%s". The X-Filter header was not honoured, so whether the zone exists is unknown.',
+                $domain,
+                $page->total,
+                $page->items[0]->domain
+            ),
+            $response->status,
+            [],
+            Json::encode($response->data),
+            null,
+            $response->meta
+        );
     }
 
     /**
@@ -136,8 +156,6 @@ final class Domains extends Endpoint
     public function create(Domain|array $domain): Domain
     {
         $payload = $domain instanceof Domain ? $domain->toArray() : $domain;
-
-        $this->logger->info('Linode domain create', ['domain' => $payload['domain'] ?? null]);
 
         return Domain::fromArray($this->apiPost('domains', $payload)->object());
     }
@@ -157,11 +175,6 @@ final class Domains extends Endpoint
     {
         $payload = $changes instanceof Domain ? $changes->toArray() : $changes;
 
-        $this->logger->info('Linode domain update', [
-            'id' => $this->zoneId($id),
-            'fields' => array_keys($payload),
-        ]);
-
         return Domain::fromArray($this->apiPut($this->path($id), $payload)->object());
     }
 
@@ -178,7 +191,6 @@ final class Domains extends Endpoint
      */
     public function delete(Domain|int $id): void
     {
-        $this->logger->warning('Linode domain delete', ['id' => $this->zoneId($id)]);
 
         $this->apiDelete($this->path($id));
     }
@@ -212,10 +224,6 @@ final class Domains extends Endpoint
      */
     public function import(string $domain, string $remoteNameserver): Domain
     {
-        $this->logger->info('Linode domain import', [
-            'domain' => $domain,
-            'remote_nameserver' => $remoteNameserver,
-        ]);
 
         return Domain::fromArray($this->apiPost('domains/import', [
             'domain' => $domain,
@@ -232,7 +240,6 @@ final class Domains extends Endpoint
      */
     public function cloneTo(Domain|int $id, string $newDomain): Domain
     {
-        $this->logger->info('Linode domain clone', ['id' => $this->zoneId($id), 'domain' => $newDomain]);
 
         return Domain::fromArray($this->apiPost($this->path($id) . '/clone', [
             'domain' => $newDomain,

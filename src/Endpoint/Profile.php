@@ -41,12 +41,6 @@ final class Profile extends Endpoint
         $response = $this->apiGet('profile');
         $profile = Entity\Profile::fromArray($response->object());
 
-        $this->logger->info('Linode token verified', [
-            'username' => $profile->username,
-            'restricted' => $profile->restricted,
-            'scopes' => (string) $response->meta->scopes,
-        ]);
-
         return new TokenStatus($profile, $response->meta->scopes, $response->meta);
     }
 

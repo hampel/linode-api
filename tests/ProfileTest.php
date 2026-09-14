@@ -171,17 +171,4 @@ final class ProfileTest extends TestCase
         $this->assertSame([], $grants->for('volume'));
     }
 
-    public function test_verify_logs_the_account_without_the_token(): void
-    {
-        $logger = new RecordingLogger();
-        $this->client->pushJson(200, $this->profileRow(), ['X-OAuth-Scopes' => 'domains:read_write']);
-
-        $this->linode(logger: $logger)->verify();
-
-        $context = $logger->contextFor('Linode token verified');
-
-        $this->assertNotNull($context);
-        $this->assertSame('exampleuser', $context['username']);
-        $this->assertSame('domains:read_write', $context['scopes']);
-    }
 }

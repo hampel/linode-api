@@ -382,7 +382,7 @@ final class ConnectionTest extends TestCase
         $this->assertFalse($meta->isNearingRateLimit());
     }
 
-    public function test_it_warns_once_the_rate_limit_window_is_nearly_spent(): void
+    public function test_it_notes_at_debug_that_the_rate_limit_window_is_nearly_spent(): void
     {
         $logger = new RecordingLogger();
 
@@ -397,23 +397,11 @@ final class ConnectionTest extends TestCase
 
         $this->assertNotNull($context);
         $this->assertSame(20, $context['rate_limit_remaining']);
-    }
-
-    public function test_a_failure_is_logged_with_the_decoded_body(): void
-    {
-        $logger = new RecordingLogger();
-        $this->client->pushJson(404, $this->errors([['reason' => 'Not found']]));
-
-        try {
-            $this->linode(logger: $logger)->connection()->get('domains/1');
-        } catch (NotFoundException) {
-            // expected
-        }
-
-        $context = $logger->contextFor('Linode API error response');
-
-        $this->assertNotNull($context);
-        $this->assertSame(404, $context['status']);
+        $this->assertSame(
+            \Psr\Log\LogLevel::DEBUG,
+            $logger->levelFor('Linode API rate limit is nearly spent'),
+            'debug, not warning: a bulk job nearing its limit is behaving correctly'
+        );
     }
 
     public function test_a_put_carries_only_the_fields_it_was_given(): void

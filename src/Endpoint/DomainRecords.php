@@ -108,12 +108,6 @@ final class DomainRecords extends Endpoint
     {
         $payload = $record instanceof DomainRecord ? $record->toArray() : $record;
 
-        $this->logger->info('Linode domain record create', [
-            'domain_id' => $domainId,
-            'type' => $payload['type'] ?? null,
-            'name' => $payload['name'] ?? null,
-        ]);
-
         return DomainRecord::fromArray($this->apiPost($this->path($domainId), $payload)->object());
     }
 
@@ -132,12 +126,6 @@ final class DomainRecords extends Endpoint
 
         unset($payload['type']);
 
-        $this->logger->info('Linode domain record update', [
-            'domain_id' => $domainId,
-            'record_id' => $recordId,
-            'fields' => array_keys($payload),
-        ]);
-
         return DomainRecord::fromArray($this->apiPut($this->path($domainId, $recordId), $payload)->object());
     }
 
@@ -149,10 +137,6 @@ final class DomainRecords extends Endpoint
      */
     public function delete(int $domainId, int $recordId): void
     {
-        $this->logger->warning('Linode domain record delete', [
-            'domain_id' => $domainId,
-            'record_id' => $recordId,
-        ]);
 
         $this->apiDelete($this->path($domainId, $recordId));
     }

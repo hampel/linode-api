@@ -26,6 +26,7 @@
  */
 
 use Hampel\Linode\Api\Exception\ExceptionInterface;
+use Hampel\Linode\Api\Exception\UnexpectedResponseException;
 use Hampel\Linode\Api\Support\Filter;
 
 require __DIR__ . '/lib/client.php';
@@ -75,12 +76,20 @@ $io->line();
 
 // The other half: the client-side re-check in findByName(). Asking for a name that is not on
 // the account must answer null whatever the filter did.
-$phantom = $linode->domains()->findByName($needle);
+try {
+    $phantom = $linode->domains()->findByName($needle);
 
-if ($phantom === null) {
-    $io->success('✓ findByName() on a name that is not there is null');
-} else {
-    $io->error(sprintf('✗ findByName() invented a zone: %s', $phantom->domain));
+    if ($phantom === null) {
+        $io->success('✓ findByName() on a name that is not there is null');
+    } else {
+        $io->error(sprintf('✗ findByName() invented a zone: %s', $phantom->domain));
+        $verdict = 1;
+    }
+} catch (UnexpectedResponseException $e) {
+    // The package refusing to answer is the correct outcome when the filter is ignored - it is
+    // the probe above that reports the fault, not this line.
+    $io->warn('? findByName() raised: the filter is not being honoured, so it would not guess');
+    $io->value('message', $e->getMessage());
     $verdict = 1;
 }
 

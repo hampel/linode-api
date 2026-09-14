@@ -8,10 +8,12 @@ use Hampel\Linode\Api\Endpoint\Domains;
 use Hampel\Linode\Api\Entity\Domain;
 use Hampel\Linode\Api\Enum\DomainStatus;
 use Hampel\Linode\Api\Enum\DomainType;
+use Hampel\Linode\Api\Exception\ApiException;
 use Hampel\Linode\Api\Exception\InvalidArgumentException;
 use Hampel\Linode\Api\Exception\NotFoundException;
 use Hampel\Linode\Api\Exception\NotPermittedException;
 use Hampel\Linode\Api\Exception\RuntimeException;
+use Hampel\Linode\Api\Exception\UnexpectedResponseException;
 use Hampel\Linode\Api\Support\Filter;
 
 final class DomainsTest extends TestCase
@@ -179,23 +181,27 @@ final class DomainsTest extends TestCase
      * The dangerous failure is not a 404. It is the filter being silently ignored: a 200
      * carrying the first zone on the account, which read as "the zone you asked for" sends
      * every subsequent edit at somebody else's DNS.
+     *
+     * It raises rather than answering null. Null would mean "no such zone", and what is known
+     * is only that the API did not answer - the zone could be on a later page, and a caller
+     * that created it on the strength of a null would be refused for a name that exists.
      */
-    public function test_a_lookup_that_answers_with_the_wrong_zone_is_null_not_that_zone(): void
+    public function test_a_lookup_answered_with_other_zones_raises_rather_than_guessing(): void
     {
-        $logger = new RecordingLogger();
         $this->client->pushJson(200, $this->collection([
             $this->row('somebody-else.example', 1),
             $this->row('another.example', 2),
         ], results: 247));
 
-        $found = $this->linode(logger: $logger)->domains()->findByName('example.com');
-
-        $this->assertNull($found);
-
-        $context = $logger->contextFor('Linode answered a filtered domain lookup with something else');
-
-        $this->assertNotNull($context, 'the mismatch is worth a line in the log');
-        $this->assertSame('example.com', $context['asked_for']);
+        try {
+            $this->linode()->domains()->findByName('example.com');
+            $this->fail('did not raise');
+        } catch (UnexpectedResponseException $e) {
+            $this->assertInstanceOf(ApiException::class, $e, 'an existing catch should see it');
+            $this->assertSame(200, $e->statusCode);
+            $this->assertStringContainsString('"example.com"', $e->getMessage());
+            $this->assertStringContainsString('somebody-else.example', $e->getMessage());
+        }
     }
 
     public function test_a_lookup_picks_the_match_out_of_a_page_that_carries_more(): void

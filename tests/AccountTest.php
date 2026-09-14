@@ -116,22 +116,6 @@ final class AccountTest extends TestCase
         $this->assertNull($this->linode()->account()->find());
     }
 
-    public function test_find_logs_the_scope_gap_it_absorbed(): void
-    {
-        $logger = new RecordingLogger();
-        $this->client->pushJson(401, $this->errors([
-            ['reason' => 'Your OAuth token is not authorized to use this endpoint.'],
-        ]), $this->refusedHeaders());
-
-        $this->linode(logger: $logger)->account()->find();
-
-        $context = $logger->contextFor('Linode account is not readable by this token');
-
-        $this->assertNotNull($context);
-        $this->assertSame('account:read_only', $context['required']);
-        $this->assertSame('domains:read_write', $context['held']);
-    }
-
     /**
      * The distinction the whole 401 split exists for: find() reports "you may not read this"
      * as null, and must NOT swallow "your credential is no good" the same way - they are the

@@ -45,12 +45,7 @@ final class Account extends Endpoint
     {
         try {
             return $this->get();
-        } catch (NotPermittedException $e) {
-            $this->logger->info('Linode account is not readable by this token', [
-                'required' => (string) $e->requiredScopes(),
-                'held' => (string) $e->heldScopes(),
-            ]);
-
+        } catch (NotPermittedException) {
             return null;
         }
     }

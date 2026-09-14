@@ -34,6 +34,34 @@ final class RecordingLogger extends AbstractLogger
     }
 
     /**
+     * Every record logged above `debug` - which is what would reach an alerting channel, and
+     * what this package promises never to write.
+     *
+     * @return list<array{level: mixed, message: string, context: array<string, mixed>}>
+     */
+    public function aboveDebug(): array
+    {
+        return array_values(array_filter(
+            $this->records,
+            static fn (array $record): bool => $record['level'] !== \Psr\Log\LogLevel::DEBUG
+        ));
+    }
+
+    /**
+     * The level of the first record with this message, or null if there was none.
+     */
+    public function levelFor(string $message): mixed
+    {
+        foreach ($this->records as $record) {
+            if ($record['message'] === $message) {
+                return $record['level'];
+            }
+        }
+
+        return null;
+    }
+
+    /**
      * The context of the first record with this message, or null if there was none.
      *
      * @return array<string, mixed>|null

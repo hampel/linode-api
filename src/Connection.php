@@ -215,13 +215,6 @@ final class Connection
             // fake with no body. Read as [] it would reach the caller as "this account has no
             // domains", which is the failure worth being loud about on an API used to manage
             // DNS.
-            $this->logger->error('Linode API answered success with a body that is not JSON', [
-                'method' => $request->getMethod(),
-                'uri' => (string) $request->getUri(),
-                'status' => $status,
-                'content_type' => $response->getHeaderLine('Content-Type'),
-            ]);
-
             throw MalformedResponseException::forResponse(
                 $request->getMethod(),
                 (string) $request->getUri(),
@@ -230,13 +223,12 @@ final class Connection
             );
         }
 
-        $this->logger->error('Linode API error response', [
-            'method' => $request->getMethod(),
-            'uri' => (string) $request->getUri(),
-            'status' => $status,
-            'body' => $decoded ?? $body,
-        ]);
-
+        // RAISED, NOT LOGGED. Whether this is a failure is decided by whoever catches it, and
+        // this package catches some of its own: apiFind() turns a 404 into null, and
+        // Account::find() turns a scope refusal into null. Logged at `error` here first, both
+        // reported an ordinary answer as a fault - a find() for a zone that is not there paged
+        // whoever routes error logs to an alerting channel - and every failure a caller did log
+        // arrived twice. The exception carries what the log line did: status, body, errors.
         throw ApiException::fromResponse(
             $request->getMethod(),
             (string) $request->getUri(),
@@ -247,8 +239,12 @@ final class Connection
     }
 
     /**
-     * Log it, send it, and keep a transport failure distinct from an HTTP status. A PSR-18
-     * client throws only for the former, which is what makes that separation free.
+     * Log the request at `debug`, send it, and keep a transport failure distinct from an HTTP
+     * status. A PSR-18 client throws only for the former, which is what makes that separation
+     * free.
+     *
+     * `debug` is the only level this package logs at. A failure is raised rather than logged -
+     * see send() for why - so the request line is the whole of what reaches a logger.
      *
      * The catch is ClientExceptionInterface and not \Throwable, deliberately. Anything else
      * a client throws is not a transport failure and must not be dressed as one: Laravel's
@@ -272,25 +268,20 @@ final class Connection
         try {
             return $this->client->sendRequest($request);
         } catch (ClientExceptionInterface $e) {
-            $this->logger->error('Linode API request failed', [
-                'method' => $method,
-                'uri' => $uri,
-                'error' => $e->getMessage(),
-            ]);
-
             throw RequestException::for($method, $uri, $e);
         }
     }
 
     /**
-     * Nothing has failed, but the window is nearly spent - which is the only warning a
-     * client gets before a 429, and it arrives on every response rather than only on the
-     * last good one.
+     * Nothing has failed, but the window is nearly spent. Logged at `debug` like everything
+     * else here: it is not a failure, and a warning would page an alerting channel for a bulk
+     * job that is behaving correctly. A caller that wants to act on it reads
+     * `ResponseMeta::isNearingRateLimit()`, which is on every response.
      */
     private function noteRateLimit(RequestInterface $request, ResponseMeta $meta): void
     {
         if ($meta->isNearingRateLimit()) {
-            $this->logger->warning('Linode API rate limit is nearly spent', [
+            $this->logger->debug('Linode API rate limit is nearly spent', [
                 'uri' => (string) $request->getUri(),
                 ...$meta->toArray(),
             ]);
