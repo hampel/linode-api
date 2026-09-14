@@ -544,9 +544,8 @@ framework's own HTTP client can carry this traffic by implementing PSR-18's one 
 it. That is what makes `Http::fake()` and `Http::preventStrayRequests()` able to see these
 requests, which they cannot when a package holds its own client.
 
-A `hampel/linode-api-laravel` providing a service provider, a manager for named accounts, a
-facade and that adapter is planned. It is **not released yet**; until it is, wire the client
-up in a service provider of your own.
+[`hampel/linode-api-laravel`](https://github.com/hampel/linode-api-laravel) provides that
+adapter, with a service provider, a manager for named accounts and a facade.
 
 ## Versioning and support
 
