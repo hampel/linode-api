@@ -1,8 +1,6 @@
-CHANGELOG
-=========
+# Changelog
 
-1.2.0 (2026-09-14)
-------------------
+## 1.2.0 (2026-09-14)
 
 **Breaking, released as a minor:** `DomainRecord::$type` and `Domain::$type` are nullable, and
 failures are no longer logged.
@@ -20,42 +18,36 @@ failures are no longer logged.
   lookup with other zones, where it logged a warning and returned `null`
 * the README links `hampel/linode-api-laravel`, which it described as unreleased
 
-1.1.0 (2026-09-13)
-------------------
+## 1.1.0 (2026-09-13)
 
 * `Domains::update()`, `delete()`, `zoneFile()` and `cloneTo()` accept a `Domain` as well as an
   id, so a `findByName()` result feeds straight into them. `get()` and `find()` are unchanged
   and take an id
 
-1.0.0 (2026-09-13)
-------------------
+## 1.0.0 (2026-09-13)
 
 **The public API is declared stable.** A breaking change from here means `2.0.0`. The
 constraint to write is `^1.0`.
 
 * no functional change: `src/` is byte-identical to `0.3.1`
 
-0.3.1 (2026-09-13)
-------------------
+## 0.3.1 (2026-09-13)
 
 * documents the `X-OAuth-Scopes` separator as a single space, and why `Scopes::fromHeader()`
   accepts a comma anyway. No behaviour change
 
-0.3.0 (2026-09-13)
-------------------
+## 0.3.0 (2026-09-13)
 
 * `DomainRecord::effectiveTtl()` takes the zone, as a `Domain` or a `ttl_sec`, and resolves a
   record `ttl_sec` of `0` to the zone's TTL. A record's zero inherits the zone rather than
   falling back to a fixed default; without a zone it still answers `null`
 
-0.2.1 (2026-09-13)
-------------------
+## 0.2.1 (2026-09-13)
 
 * README states `^0.2` as the constraint to write. `0.2.0` shipped saying `^0.1`, which
   resolves to `0.1.0` and excludes the release it documents
 
-0.2.0 (2026-09-13)
-------------------
+## 0.2.0 (2026-09-13)
 
 **Breaking, hence 0.2.0 rather than 0.1.1:** code that relied on an empty-bodied `200`
 resolving to an empty response now gets an exception.
@@ -65,8 +57,7 @@ resolving to an empty response now gets an exception.
 * a successful `DELETE` answers `200` with a body of `{}`, so it decodes like any other
   response and is unaffected
 
-0.1.0 (2026-09-13)
-------------------
+## 0.1.0 (2026-09-13)
 
 Initial release.
 

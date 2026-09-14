@@ -71,7 +71,10 @@ final class DocumentedConstraintTest extends BaseTestCase
     {
         $changelog = (string) file_get_contents(__DIR__ . '/../CHANGELOG.md');
 
-        if (preg_match('/^(\d+\.\d+\.\d+) \(\d{4}-\d{2}-\d{2}\)$/m', $changelog, $m) !== 1) {
+        // A version heading is `## 1.2.0 (2026-09-14)`. The hashes are optional in the pattern
+        // because an underlined heading carries none, and this test is not the place to decide
+        // which heading syntax the changelog uses - only which version it names first.
+        if (preg_match('/^(?:#+\s+)?(\d+\.\d+\.\d+) \(\d{4}-\d{2}-\d{2}\)$/m', $changelog, $m) !== 1) {
             self::fail('No dated release heading found in CHANGELOG.md');
         }
 
