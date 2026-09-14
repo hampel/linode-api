@@ -15,7 +15,7 @@ A PHP client for the
 It wraps the **DNS endpoints** — zones and records — and the two endpoints that answer *does
 this token work, and what may it do*. That is a dozen of Linode's three hundred, deliberately:
 the rest are reachable through the same client without waiting for a release, and
-[extending it](#extending-it) is one class.
+[extending it](#extending) is one class.
 
 ## Installation
 
@@ -66,7 +66,7 @@ records each failure once, and a `find()` that finds nothing records nothing at 
 is never logged: `AccessToken::describe()` prints its length and last four characters and
 nothing else.
 
-## Does this token work?
+## Verifying a token
 
 The question every integration should ask before doing anything, and the API makes it cheap
 to answer. `GET /v4/profile` needs **no OAuth scope at all**, so it succeeds for any
@@ -426,7 +426,7 @@ Decoded permissively they become an empty array, which reaches the caller as *th
 no domains* — and code that acts on that answer deletes things. So a 2xx that is not JSON
 raises, and it extends `ApiException` so an existing catch still sees it.
 
-## Things about the Linode API worth not rediscovering
+## API behaviour
 
 Each of these is asserted in `tests/` or exercised in `harness/`, so if one stops being true
 something should say so. The ones marked *measured* were read off the live API on 12 September
@@ -463,7 +463,7 @@ something should say so. The ones marked *measured* were read off the live API o
 - **A 204 is the only success with a legitimately empty body**, and that is `GET
   /v4/profile/grants` on an unrestricted user. An empty-bodied **200** raises
   `MalformedResponseException`, because on this API nothing legitimately answers one — see the
-  note under *Testing code that uses this*.
+  note under *Testing your code*.
 - **`GET /v4/profile/grants` is a 204 for an unrestricted user** — see above; it is the trap
   in this API most likely to be read backwards.
 - **`GET /v4/profile` needs no scope**, which is what makes it the token check.
@@ -483,7 +483,7 @@ something should say so. The ones marked *measured* were read off the live API o
 - **Linode's DNS has no SSHFP, TLSA, NAPTR, DNSKEY or DS.** `RecordType` is the complete list,
   and a zone that needs one of those cannot be hosted here whatever this package does.
 
-## Extending it
+## Extending
 
 This package wraps a dozen endpoints. For the rest, two ways past it, neither needing a
 release:
@@ -514,7 +514,7 @@ There is nothing to register, no container and no string keys — the class *is*
 registration, and static analysis follows the return type through.
 `tests/Fixture/Instances.php` is a worked example with a test behind it.
 
-## Testing code that uses this
+## Testing your code
 
 **Fake the PSR-18 client, not this package.** The seam the package offers its consumers is the
 same one its own test suite drives it through — `sendRequest()`, one method — so a stub client
