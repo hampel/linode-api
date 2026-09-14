@@ -16,7 +16,7 @@ namespace Hampel\Linode\Api\Support;
  * ONE RULE, NOT TWO - AND THE SPECIFICATION SAYS OTHERWISE. Linode's own documentation
  * describes a record's `ttl_sec` as rounded "to the NEAREST valid value" off a list that
  * starts at 300, which would be a different rule from the zone fields'. Measured against the
- * live API on 12 September 2026, by writing each value to a real record and reading back what
+ * live API on 2026-09-12, by writing each value to a real record and reading back what
  * was stored:
  *
  *     asked      0    1   30   60  120  300  3000  86401  2419201

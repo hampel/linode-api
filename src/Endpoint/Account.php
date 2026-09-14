@@ -19,7 +19,7 @@ use Hampel\Linode\Api\Exception\NotPermittedException;
  * endpoint to check a token; use this only when the account details are the thing you
  * actually want.
  *
- * THE REFUSAL IS A 401, NOT A 403 - measured against the live API on 12 September 2026 with
+ * THE REFUSAL IS A 401, NOT A 403 - measured against the live API on 2026-09-12 with
  * a token holding `domains:read_write` and nothing else. It still arrives here as
  * NotPermittedException, because the type follows the situation rather than the status; see
  * ApiException. A catch written against the status code would miss it.

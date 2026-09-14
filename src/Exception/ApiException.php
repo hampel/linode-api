@@ -16,7 +16,7 @@ use Psr\Http\Message\ResponseInterface;
  * consumer catch the one thing it can act on rather than inspecting a message.
  *
  * THE STATUS IS NOT ENOUGH TO BUILD THAT SEPARATION FROM, and this is the one place this
- * package deliberately departs from it. Measured on 12 September 2026: a valid token calling
+ * package deliberately departs from it. Measured on 2026-09-12: a valid token calling
  * an endpoint its scopes do not cover answers **401**, not 403 -
  *
  *     401  X-OAuth-Scopes: domains:read_write   "Your OAuth token is not authorized to use
@@ -171,7 +171,7 @@ abstract class ApiException extends LinodeException
     /**
      * LINODE SENDS A `Retry-After` ON EVERY RESPONSE, INCLUDING A 200.
      *
-     * Measured against the live API on 12 September 2026: a successful `GET /v4/regions`
+     * Measured against the live API on 2026-09-12: a successful `GET /v4/regions`
      * carried `Retry-After: 60` beside `X-RateLimit-Remaining: 1839`, and a later successful
      * call carried 46. It counts down to the rate-limit window's reset rather than being a
      * fixed figure, and it is there whether or not anything went wrong.

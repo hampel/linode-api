@@ -29,7 +29,7 @@ final class Page implements \Countable, \IteratorAggregate, \JsonSerializable
     public const DEFAULT_SIZE = 100;
 
     /**
-     * LINODE REFUSES A PAGE SMALLER THAN 25. Measured on 12 September 2026:
+     * LINODE REFUSES A PAGE SMALLER THAN 25. Measured on 2026-09-12:
      * `?page_size=1` answers `400 {"errors": [{"field": "page_size", "reason": "Must be
      * 25-500"}]}`, which is a surprise to anyone who has asked another API for one item to
      * see the shape of it. Use `results` off any page for a count instead - a `page_size=25`

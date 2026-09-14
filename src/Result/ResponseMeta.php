@@ -19,7 +19,7 @@ final class ResponseMeta implements \JsonSerializable
 {
     private function __construct(
         /**
-         * Requests allowed in the current window. Measured at 1840 on 12 September 2026 for
+         * Requests allowed in the current window. Measured at 1840 on 2026-09-12 for
          * an unauthenticated request; it varies by endpoint, so read it rather than assuming
          * a figure.
          */
@@ -41,7 +41,7 @@ final class ResponseMeta implements \JsonSerializable
         /** What the endpoint would have accepted, from `X-Accepted-OAuth-Scopes`. */
         public readonly Scopes $acceptedScopes,
         /**
-         * The API build that answered, from `X-Spec-Version`. Live on 12 September 2026:
+         * The API build that answered, from `X-Spec-Version`. Live on 2026-09-12:
          * 4.235.1, against a published specification at 4.215.0 - the deployed API runs
          * ahead of the document, which is worth knowing before concluding an endpoint does
          * not exist.

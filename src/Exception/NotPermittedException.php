@@ -10,7 +10,7 @@ use Hampel\Linode\Api\Result\Scopes;
  * The credential is real and does not have the standing for this.
  *
  * IT ARRIVES AS A 401 MORE OFTEN THAN A 403, which is why this type exists rather than a
- * `$e->statusCode === 403` check at the call site. Measured on 12 September 2026: a valid
+ * `$e->statusCode === 403` check at the call site. Measured on 2026-09-12: a valid
  * token calling an endpoint outside its scopes answers 401 with "Your OAuth token is not
  * authorized to use this endpoint." - the same status as a token that is not a token. See
  * ApiException for how the two are told apart, and why the type follows the situation rather

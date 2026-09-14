@@ -53,7 +53,7 @@ step.
 ## Facts about the Linode API worth not rediscovering
 
 Each is asserted in `tests/` or printed by a harness exercise. Those marked *measured* were
-read off the live API on 12 September 2026.
+read off the live API on 2026-09-12.
 
 - **AN INSUFFICIENT SCOPE IS A 401, NOT A 403** — *measured* with a token holding
   `domains:read_write` and nothing else. The same status as a bad credential, and the
@@ -96,7 +96,7 @@ read off the live API on 12 September 2026.
   `DomainRecords::update()` strips it rather than sending it to be rejected.
 - **TTLs are rounded UP, silently, by ONE rule** - and the specification says otherwise for
   records. It describes a record's `ttl_sec` as rounded to the *nearest* valid value off a
-  list starting at 300; measured on 12 September 2026 by writing each value to a real record,
+  list starting at 300; measured on 2026-09-12 by writing each value to a real record,
   it rounds up off the same list a zone uses, starting at 30:
 
   ```

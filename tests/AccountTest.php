@@ -72,7 +72,7 @@ final class AccountTest extends TestCase
     }
 
     /**
-     * The exact refusal the live API gives a DNS-only token, measured on 12 September 2026:
+     * The exact refusal the live API gives a DNS-only token, measured on 2026-09-12:
      * a 401 - not the 403 the situation would suggest - carrying the token's own scopes and
      * the ones the endpoint wanted.
      *

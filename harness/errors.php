@@ -66,7 +66,7 @@ $expect = function (string $what, string $expected, callable $probe) use ($io): 
     }
 };
 
-// 401: measured on 12 September 2026 as identical for a bogus token and for no header at
+// 401: measured on 2026-09-12 as identical for a bogus token and for no header at
 // all - "Invalid Token" either way.
 $factory = new HttpFactory();
 $bogus = new Client(new Config(), new AccessToken('not-a-real-token'), new Guzzle(), $factory, $factory);

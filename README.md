@@ -269,7 +269,7 @@ record's `ttl_sec`.
 
 > **This contradicts Linode's own documentation**, which describes a record's `ttl_sec` as
 > rounded to the *nearest* valid value off a list starting at 300. Measured against the live
-> API on 12 September 2026 by writing each value to a real record and reading back what was
+> API on 2026-09-12 by writing each value to a real record and reading back what was
 > stored:
 >
 > | asked | 0 | 1 | 30 | 60 | 120 | 300 | 900 | 3000 | 86401 | 2419201 |
@@ -390,7 +390,7 @@ try {
 ### A scope failure is a 401, not a 403
 
 This is the one place the exception type deliberately does not follow the status, and it is
-not a preference. Measured on 12 September 2026 with a token holding `domains:read_write` and
+not a preference. Measured on 2026-09-12 with a token holding `domains:read_write` and
 nothing else:
 
 ```
@@ -429,8 +429,7 @@ raises, and it extends `ApiException` so an existing catch still sees it.
 ## API behaviour
 
 Each of these is asserted in `tests/` or exercised in `harness/`, so if one stops being true
-something should say so. The ones marked *measured* were read off the live API on 12 September
-2026.
+something should say so. The ones marked *measured* were read off the live API on 2026-09-12.
 
 - **A `Retry-After` is on every response, including a 200** — *measured*: 60 beside
   `X-RateLimit-Remaining: 1839` on a fresh window, 46 on a later successful call, so it counts

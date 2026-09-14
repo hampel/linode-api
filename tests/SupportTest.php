@@ -78,7 +78,7 @@ final class SupportTest extends BaseTestCase
     }
 
     /**
-     * The rounding table, measured against the live API on 12 September 2026 by writing each
+     * The rounding table, measured against the live API on 2026-09-12 by writing each
      * value to a real domain record and reading back what was stored.
      *
      * It contradicts Linode's own documentation twice, which is why it is pinned here as a

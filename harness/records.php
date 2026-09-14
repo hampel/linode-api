@@ -111,7 +111,7 @@ $leaked = false;
 //
 // The specification says a record's ttl_sec is "rounded to the NEAREST valid value" off a list
 // starting at 300, while a zone's four interval fields round UP off a list starting at 30.
-// Measured on 12 September 2026, 900 came back as 3600 - so it rounds up, not to the nearest,
+// Measured on 2026-09-12, 900 came back as 3600 - so it rounds up, not to the nearest,
 // and the documentation is wrong about that. But 900 rounds up to 3600 under BOTH candidate
 // lists, so it says nothing about where the list starts.
 //
@@ -132,7 +132,7 @@ $ttlProbes = [0, 1, 30, 60, 120, 300, 3000, 86401, 2419201];
  * The TTL the zone file actually renders for our probe record, or null when the file does not
  * mention it yet.
  *
- * THE ZONE FILE IS NOT LIVE, AND THE LAG IS MINUTES. Measured on 12 September 2026: straight
+ * THE ZONE FILE IS NOT LIVE, AND THE LAG IS MINUTES. Measured on 2026-09-12: straight
  * after a write it showed a TTL two changes old and a record that had already been deleted,
  * and on another run a change had still not rendered after 160 seconds. So anything read from
  * it has to be waited for rather than taken on the first look, and a probe that breaks on the

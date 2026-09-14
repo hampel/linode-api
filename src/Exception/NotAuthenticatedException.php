@@ -9,7 +9,7 @@ namespace Hampel\Linode\Api\Exception;
  *
  * Linode answers `{"errors": [{"reason": "Invalid Token"}]}` for all four, and for a request
  * that carried no Authorization header at all, so there is nothing in the response to tell
- * those apart. Measured on 12 September 2026: no header and a made-up bearer token produce
+ * those apart. Measured on 2026-09-12: no header and a made-up bearer token produce
  * byte-identical replies.
  *
  * NOT EVERY 401 REACHES HERE. A valid token refused for its scopes is also a 401 on this API,

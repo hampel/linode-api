@@ -174,7 +174,7 @@ final class ConnectionTest extends TestCase
 
     /**
      * THE ONE PLACE THE TYPE DOES NOT FOLLOW THE STATUS, and it is not a preference - both
-     * of these are 401 on the live API, measured on 12 September 2026 with a token holding
+     * of these are 401 on the live API, measured on 2026-09-12 with a token holding
      * `domains:read_write` and nothing else:
      *
      *   401  X-OAuth-Scopes: domains:read_write  "Your OAuth token is not authorized ..."
@@ -298,7 +298,7 @@ final class ConnectionTest extends TestCase
 
     /**
      * The exact reply the live API gives for a missing header and for a made-up token, both
-     * measured on 12 September 2026. They are indistinguishable, which is why the exception
+     * measured on 2026-09-12. They are indistinguishable, which is why the exception
      * message cannot claim to know which happened.
      */
     public function test_an_invalid_token_is_reported_as_authentication(): void
