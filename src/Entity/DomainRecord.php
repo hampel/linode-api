@@ -45,10 +45,13 @@ final class DomainRecord implements \JsonSerializable
     public const REMOTE_ADDR = '[remote_addr]';
 
     /**
+     * @param  RecordType|null  $type  null for a record READ from the API whose type this
+     *                                 package does not model. The original is in `raw['type']`.
+     *                                 A record built here always has one
      * @param  array<string, mixed>  $raw
      */
     public function __construct(
-        public readonly RecordType $type,
+        public readonly ?RecordType $type,
         public readonly ?string $name = null,
         public readonly ?string $target = null,
         public readonly ?int $id = null,
@@ -205,7 +208,10 @@ final class DomainRecord implements \JsonSerializable
     public static function fromArray(array $row): self
     {
         return new self(
-            RecordType::tryFrom(Cast::string($row['type'] ?? null) ?? '') ?? RecordType::A,
+            // Null for a type RecordType does not model, never a guess. Reading it as `A` - which
+            // this did - showed a type Linode adds later as an address record whose target is not
+            // an address, with nothing to say it had been substituted.
+            RecordType::tryFrom(Cast::string($row['type'] ?? null) ?? ''),
             Cast::string($row['name'] ?? null),
             Cast::string($row['target'] ?? null),
             Cast::int($row['id'] ?? null),
@@ -234,11 +240,12 @@ final class DomainRecord implements \JsonSerializable
      */
     public function toArray(): array
     {
-        $payload = ['type' => $this->type->value];
+        $type = $this->modelledType();
+        $payload = ['type' => $type->value];
 
         // SRV is the one type with no name of its own: Linode composes it from the service
         // and the protocol, and sending one is at best ignored.
-        if (!$this->type->usesServiceFields() && $this->name !== null) {
+        if (!$type->usesServiceFields() && $this->name !== null) {
             $payload['name'] = $this->name;
         }
 
@@ -250,11 +257,11 @@ final class DomainRecord implements \JsonSerializable
             $payload['ttl_sec'] = $this->ttlSec;
         }
 
-        if ($this->type->usesPriority() && $this->priority !== null) {
+        if ($type->usesPriority() && $this->priority !== null) {
             $payload['priority'] = $this->priority;
         }
 
-        if ($this->type->usesServiceFields()) {
+        if ($type->usesServiceFields()) {
             foreach (['service' => $this->service, 'protocol' => $this->protocol] as $key => $value) {
                 if ($value !== null) {
                     $payload[$key] = $value;
@@ -268,7 +275,7 @@ final class DomainRecord implements \JsonSerializable
             }
         }
 
-        if ($this->type->usesTag() && $this->tag !== null) {
+        if ($type->usesTag() && $this->tag !== null) {
             $payload['tag'] = $this->tag->value;
         }
 
@@ -388,6 +395,36 @@ final class DomainRecord implements \JsonSerializable
     public function jsonSerialize(): array
     {
         return $this->raw !== [] ? $this->raw : $this->toArray();
+    }
+
+    /**
+     * The name of the record's type, whether or not this package models it - `raw['type']` for
+     * one it does not. For display and for branching on a type RecordType has no case for.
+     */
+    public function typeName(): ?string
+    {
+        return $this->type->value ?? Cast::string($this->raw['type'] ?? null);
+    }
+
+    /**
+     * The type, insisting this package models it.
+     *
+     * A record of an unmodelled type can be READ - everything Linode sent is in `raw` - but not
+     * written back, because which fields that type may carry is exactly what is unknown here,
+     * and Linode rejects a field that does not belong to the type being written.
+     */
+    private function modelledType(): RecordType
+    {
+        if ($this->type === null) {
+            throw new InvalidArgumentException(sprintf(
+                'This record came back as type "%s", which this package does not model. It can be read - '
+                    . '`raw` has everything Linode sent - but not written back, because the fields that '
+                    . 'type may carry are unknown here. Send an array to create() or update() instead.',
+                $this->typeName() ?? 'unknown'
+            ));
+        }
+
+        return $this->type;
     }
 
     private function with(

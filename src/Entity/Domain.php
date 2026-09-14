@@ -51,7 +51,7 @@ final class Domain implements \JsonSerializable
      */
     public function __construct(
         public readonly string $domain,
-        public readonly DomainType $type,
+        public readonly ?DomainType $type,
         public readonly ?int $id = null,
         public readonly ?string $soaEmail = null,
         public readonly ?DomainStatus $status = null,
@@ -112,7 +112,9 @@ final class Domain implements \JsonSerializable
     public static function fromArray(array $row): self
     {
         $domain = Cast::string($row['domain'] ?? null) ?? '';
-        $type = DomainType::tryFrom(Cast::string($row['type'] ?? null) ?? '') ?? DomainType::Master;
+        // Null for a type DomainType does not model, never a guess - reading an unknown one as
+        // `Master`, as this did, would have claimed Linode is authoritative for a zone it may not be.
+        $type = DomainType::tryFrom(Cast::string($row['type'] ?? null) ?? '');
 
         return new self(
             $domain,
@@ -144,7 +146,9 @@ final class Domain implements \JsonSerializable
     {
         $payload = [
             'domain' => $this->domain,
-            'type' => $this->type->value,
+            // Omitted for an unmodelled type rather than guessed: an update is partial, so
+            // leaving it out leaves the zone's type alone.
+            'type' => $this->type?->value,
             'soa_email' => $this->soaEmail,
             'status' => $this->status?->value,
             'description' => $this->description,

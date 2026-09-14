@@ -42,7 +42,7 @@ foreach ($zones as $zone) {
     $io->line(sprintf(
         '  %-34s %-7s %-9s ttl %-8s %s',
         $zone->domain,
-        $zone->type->value,
+        $zone->type->value ?? '(' . (string) ($zone->raw['type'] ?? '?') . ')',
         $zone->status?->value ?? '?',
         $zone->effectiveTtl(),
         $zone->tags === [] ? '' : '[' . implode(', ', $zone->tags) . ']'
@@ -79,10 +79,10 @@ $records = $linode->domains()->records((int) $zone->id);
 foreach ($records->all(Filter::make()->orderBy('name')) as $record) {
     $io->line(sprintf(
         '  %-6s %-28s %-40s %s',
-        $record->type->value,
+        $record->typeName() ?? '?',
         $record->fqdn($zone->domain),
         (string) $record->target,
-        $record->type->usesPriority() ? 'priority ' . (string) $record->priority : ''
+        $record->type?->usesPriority() === true ? 'priority ' . (string) $record->priority : ''
     ));
 }
 

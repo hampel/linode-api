@@ -256,11 +256,52 @@ final class EntityTest extends BaseTestCase
         $this->assertSame('example.com', DomainRecord::mx('mail.example.com')->fqdn('example.com'));
     }
 
-    public function test_an_unknown_record_type_from_the_api_does_not_fatal(): void
+    /**
+     * An unmodelled type is null, never a guess. Reading one as `A` - which this did, with a test
+     * asserting it - showed a type Linode adds later as an address record whose target is not an
+     * address. Reported by a consumer that had to read `raw['type']` to get the truth.
+     */
+    public function test_an_unknown_record_type_is_null_with_the_original_kept(): void
     {
         $record = DomainRecord::fromArray(['type' => 'SSHFP', 'name' => 'a', 'target' => 'b']);
 
-        $this->assertSame(RecordType::A, $record->type, 'falls back rather than throwing on a read');
+        $this->assertNull($record->type);
+        $this->assertSame('SSHFP', $record->typeName());
+        $this->assertSame('SSHFP', $record->raw['type']);
+        $this->assertSame('a', $record->name, 'everything else still reads');
+    }
+
+    public function test_a_modelled_record_type_names_itself(): void
+    {
+        $this->assertSame('MX', DomainRecord::mx('mail.example.com')->typeName());
+    }
+
+    /**
+     * Readable, but not writable: which fields an unmodelled type may carry is exactly what is
+     * unknown, and Linode rejects a field that does not belong to the type being written.
+     */
+    public function test_a_record_of_an_unknown_type_cannot_be_written_back(): void
+    {
+        $record = DomainRecord::fromArray(['type' => 'SSHFP', 'name' => 'a', 'target' => 'b']);
+
+        $this->expectException(InvalidArgumentException::class);
+        $this->expectExceptionMessage('"SSHFP", which this package does not model');
+
+        $record->toArray();
+    }
+
+    /**
+     * A domain's type does not govern its other fields, so an unknown one is left out of the
+     * payload rather than refused - an update is partial, so the zone's type stays as it is.
+     */
+    public function test_an_unknown_domain_type_is_null_and_omitted_from_a_write(): void
+    {
+        $domain = Domain::fromArray(['id' => 1, 'domain' => 'example.com', 'type' => 'secondary']);
+
+        $this->assertNull($domain->type);
+        $this->assertSame('secondary', $domain->raw['type']);
+        $this->assertFalse($domain->isMaster());
+        $this->assertArrayNotHasKey('type', $domain->withTtl(300)->toArray());
     }
 
     public function test_an_entity_serialises_to_what_the_api_sent(): void
