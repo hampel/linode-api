@@ -1,5 +1,13 @@
 # Changelog
 
+## 1.4.0 (2026-09-18)
+
+* **deprecated:** calling `DomainRecord::srv()` without a priority or a weight. Each still
+  defaults to 0 and now raises `E_USER_DEPRECATED`; 2.0.0 will require both. Passing them
+  raises nothing
+* `DomainRecord::srv()`'s `$priority` and `$weight` accept `null`, which is the same as omitting
+  them
+
 ## 1.3.0 (2026-09-18)
 
 * **deprecated:** calling `DomainRecord::mx()` without a priority. It still defaults to 0 and now

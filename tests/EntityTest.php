@@ -196,14 +196,14 @@ final class EntityTest extends BaseTestCase
         $this->expectException(InvalidArgumentException::class);
         $this->expectExceptionMessage('Linode prepends the underscore itself');
 
-        DomainRecord::srv('_sip', 'tcp', 'sip.example.com', 5060);
+        DomainRecord::srv('_sip', 'tcp', 'sip.example.com', 5060, 10, 5);
     }
 
     public function test_an_srv_protocol_written_the_decorated_way_is_refused_too(): void
     {
         $this->expectException(InvalidArgumentException::class);
 
-        DomainRecord::srv('sip', '_tcp', 'sip.example.com', 5060);
+        DomainRecord::srv('sip', '_tcp', 'sip.example.com', 5060, 10, 5);
     }
 
     public function test_a_record_without_the_thing_it_points_at_is_refused(): void
@@ -255,6 +255,41 @@ final class EntityTest extends BaseTestCase
         $this->assertSame(0, DomainRecord::mx('mail.example.com', 0)->priority);
         $this->assertSame(10, DomainRecord::mx('mail.example.com', priority: 10)->priority);
         $this->assertSame('mail', DomainRecord::mx('mail.example.com', 5, 'mail')->name);
+    }
+
+    /**
+     * The same deprecation for SRV, where either field left out raises it. Deprecated rather than
+     * kept because the other providers' clients require both; a default here is the one place a
+     * record copied between them would silently differ.
+     */
+    #[\PHPUnit\Framework\Attributes\IgnoreDeprecations]
+    public function test_omitting_an_srv_priority_is_deprecated_and_still_zero(): void
+    {
+        $this->expectUserDeprecationMessageMatches('/without a priority and a weight is deprecated/');
+
+        $record = DomainRecord::srv('sip', 'tcp', 'sip.example.com', 5060, weight: 5);
+
+        $this->assertSame(0, $record->priority);
+        $this->assertSame(5, $record->weight);
+    }
+
+    #[\PHPUnit\Framework\Attributes\IgnoreDeprecations]
+    public function test_omitting_an_srv_weight_is_deprecated_and_still_zero(): void
+    {
+        $this->expectUserDeprecationMessageMatches('/without a priority and a weight is deprecated/');
+
+        $record = DomainRecord::srv('sip', 'tcp', 'sip.example.com', 5060, 10);
+
+        $this->assertSame(10, $record->priority);
+        $this->assertSame(0, $record->weight);
+    }
+
+    public function test_an_explicit_srv_priority_and_weight_raise_nothing(): void
+    {
+        $record = DomainRecord::srv('sip', 'tcp', 'sip.example.com', 5060, 0, 0);
+
+        $this->assertSame(0, $record->priority);
+        $this->assertSame(0, $record->weight);
     }
 
     public function test_priority_is_sent_only_where_it_means_something(): void

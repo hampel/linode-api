@@ -110,7 +110,7 @@ final class DomainRecord implements \JsonSerializable
      *
      * OMITTING THE PRIORITY IS DEPRECATED, and 2.0.0 will require it. There is no correct default
      * for a field whose whole job is relative ordering, and packages disagree about it - this one
-     * has defaulted to 0 where others default to 10 - so a set of MX records copied between
+     * defaulted to 0 where others defaulted to 10 - so a set of MX records copied between
      * providers with the priority left out keeps delivering mail in an order nobody chose, with
      * nothing to say so. Omitted, it is still 0 and a deprecation is raised; passed, nothing
      * changes.
@@ -180,22 +180,39 @@ final class DomainRecord implements \JsonSerializable
      * this refuses a leading underscore rather than passing it through.
      *
      * Lower priority wins; among equal priorities, higher weight is preferred.
+     *
+     * OMITTING THE PRIORITY OR THE WEIGHT IS DEPRECATED, and 2.0.0 will require both, for the
+     * reason `mx()` gives: there is no correct default for relative ordering, and the sibling
+     * clients for other providers already require them. Omitted, each is still 0 and a
+     * deprecation is raised; passed, zero included, nothing changes.
+     *
+     * @param  int|null  $priority  required from 2.0.0; null (or omitted) is deprecated
+     * @param  int|null  $weight  required from 2.0.0; null (or omitted) is deprecated
      */
     public static function srv(
         string $service,
         string $protocol,
         string $target,
         int $port,
-        int $priority = 0,
-        int $weight = 0,
+        ?int $priority = null,
+        ?int $weight = null,
     ): self {
+        if ($priority === null || $weight === null) {
+            trigger_error(
+                'Calling DomainRecord::srv() without a priority and a weight is deprecated and will be '
+                    . 'an error in hampel/linode-api 2.0.0; each defaults to 0 until then. Pass both '
+                    . 'explicitly.',
+                E_USER_DEPRECATED
+            );
+        }
+
         return new self(
             RecordType::SRV,
             null,
             self::required($target, 'An SRV record needs a target.'),
             port: $port,
-            priority: $priority,
-            weight: $weight,
+            priority: $priority ?? 0,
+            weight: $weight ?? 0,
             service: self::undecorated($service, 'service'),
             protocol: self::undecorated($protocol, 'protocol'),
         );
