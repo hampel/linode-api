@@ -136,6 +136,10 @@ read off the live API on 2026-09-12.
   nameserver served each as two strings joining back to exactly that value. The split is
   Linode's, at the nameserver. Stated on `DomainRecord::txt()` because not every provider does
   this, and a caller comparing values across providers needs to know which side rewrites.
+- **An MX target reads back without its trailing dot** - *measured* on 2026-09-18: the API
+  answered `ASPMX.L.GOOGLE.COM` where the nameserver served `ASPMX.L.GOOGLE.COM.`. Reported by
+  a consumer copying zones to a provider that rejects an MX without the dot. Documented on
+  `DomainRecord::mx()` rather than normalised on read, which would change a value 1.x returns.
 - **SRV takes its service and protocol undecorated.** Linode prepends the underscore and
   appends the period itself, so `_sip` becomes `__sip` and matches nothing, with no error.
   `DomainRecord::srv()` refuses a leading underscore. SRV also has no `name` of its own -

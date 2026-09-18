@@ -6,6 +6,7 @@
   raises `E_USER_DEPRECATED`; 2.0.0 will require it. Passing the priority raises nothing
 * `DomainRecord::mx()`'s `$priority` accepts `null`, which is the same as omitting it
 * `DomainRecord::txt()` documents that a value over 255 characters round-trips as one string
+* `DomainRecord::mx()` documents that Linode returns an MX target without a trailing dot
 * the README's `ValidationException` example showed an error Linode cannot return; it now shows
   the `page_size` one it does
 

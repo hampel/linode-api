@@ -103,6 +103,11 @@ final class DomainRecord implements \JsonSerializable
      *
      * Lower priority wins.
      *
+     * Linode reads the target back WITHOUT a trailing dot - `mail.example.com`, where its
+     * nameservers serve `mail.example.com.` - and this package returns it as given. That is not
+     * portable: a provider that insists on the dot rejects the value read from here verbatim,
+     * so append one when copying records elsewhere.
+     *
      * OMITTING THE PRIORITY IS DEPRECATED, and 2.0.0 will require it. There is no correct default
      * for a field whose whole job is relative ordering, and packages disagree about it - this one
      * has defaulted to 0 where others default to 10 - so a set of MX records copied between
