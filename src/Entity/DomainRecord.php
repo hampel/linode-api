@@ -137,6 +137,14 @@ final class DomainRecord implements \JsonSerializable
 
     /**
      * A text record - SPF, DKIM, DMARC, a domain-verification token.
+     *
+     * A VALUE LONGER THAN 255 CHARACTERS COMES BACK AS ONE STRING. DNS carries text in strings of
+     * at most 255 bytes, so a 2048-bit DKIM key has to be split somewhere. Linode does it at the
+     * nameserver and not in the API: measured on 2026-09-18 across three 410-character DKIM
+     * records, the API returned each unquoted and unsplit, and `ns1.linode.com` served each as
+     * two strings that joined back to exactly that value. So `target` compares directly against
+     * the value you meant, which is not true of every provider - one that answers
+     * `"first 255" "the rest"` puts the split into the value itself.
      */
     public static function txt(string $name, string $value): self
     {

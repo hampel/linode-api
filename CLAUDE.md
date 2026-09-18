@@ -131,6 +131,11 @@ read off the live API on 2026-09-12.
   on the first sight of what it is looking for - the `records` exercise did exactly that once
   and manufactured a false reading. For anything about what is served, query the nameserver
   instead - see the `dig` bullet above.
+- **A TXT value over 255 characters round-trips as one string** - *measured* on 2026-09-18 across
+  three 410-character DKIM records: the API returned each unquoted and unsplit, and the
+  nameserver served each as two strings joining back to exactly that value. The split is
+  Linode's, at the nameserver. Stated on `DomainRecord::txt()` because not every provider does
+  this, and a caller comparing values across providers needs to know which side rewrites.
 - **SRV takes its service and protocol undecorated.** Linode prepends the underscore and
   appends the period itself, so `_sip` becomes `__sip` and matches nothing, with no error.
   `DomainRecord::srv()` refuses a leading underscore. SRV also has no `name` of its own -
