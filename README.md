@@ -379,11 +379,11 @@ All but the last extend `ApiException`; all of them implement `ExceptionInterfac
 use Hampel\Linode\Api\Exception\ValidationException;
 
 try {
-    $records->create(DomainRecord::mx('mail.example.com'));
+    $linode->connection()->get('domains', ['page_size' => 1]);
 } catch (ValidationException $e) {
-    $e->reasons();              // ['Priority must be 0-255']
-    $e->fieldErrors();          // ['priority' => ['Priority must be 0-255']]
-    $e->concerns('priority');   // true
+    $e->reasons();              // ['Must be 25-500']
+    $e->fieldErrors();          // ['page_size' => ['Must be 25-500']]
+    $e->concerns('page_size');  // true
 }
 ```
 
