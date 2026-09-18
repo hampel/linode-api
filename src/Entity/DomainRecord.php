@@ -102,15 +102,29 @@ final class DomainRecord implements \JsonSerializable
      * domain itself.
      *
      * Lower priority wins.
+     *
+     * OMITTING THE PRIORITY IS DEPRECATED, and 2.0.0 will require it. There is no correct default
+     * for a field whose whole job is relative ordering, and packages disagree about it - this one
+     * has defaulted to 0 where others default to 10 - so a set of MX records copied between
+     * providers with the priority left out keeps delivering mail in an order nobody chose, with
+     * nothing to say so. Omitted, it is still 0 and a deprecation is raised; passed, nothing
+     * changes.
+     *
+     * @param  int|null  $priority  required from 2.0.0; null (or omitted) is deprecated
      */
-    public static function mx(string $target, int $priority = 0, string $name = ''): self
+    public static function mx(string $target, ?int $priority = null, string $name = ''): self
     {
-        return new self(
-            RecordType::MX,
-            self::name($name),
-            self::required($target, 'An MX record needs a mail server, or use nullMx() to refuse mail.'),
-            priority: $priority,
-        );
+        $target = self::required($target, 'An MX record needs a mail server, or use nullMx() to refuse mail.');
+
+        if ($priority === null) {
+            trigger_error(
+                'Calling DomainRecord::mx() without a priority is deprecated and will be an error in '
+                    . 'hampel/linode-api 2.0.0; it defaults to 0 until then. Pass the priority explicitly.',
+                E_USER_DEPRECATED
+            );
+        }
+
+        return new self(RecordType::MX, self::name($name), $target, priority: $priority ?? 0);
     }
 
     /**

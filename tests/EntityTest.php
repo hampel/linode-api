@@ -212,7 +212,7 @@ final class EntityTest extends BaseTestCase
             fn () => DomainRecord::a('www', ''),
             fn () => DomainRecord::cname('www', ' '),
             fn () => DomainRecord::txt('www', ''),
-            fn () => DomainRecord::mx(''),
+            fn () => DomainRecord::mx('', 10),
             fn () => DomainRecord::caa(CaaTag::Issue, ''),
         ] as $build) {
             try {
@@ -222,6 +222,39 @@ final class EntityTest extends BaseTestCase
                 $this->addToAssertionCount(1);
             }
         }
+    }
+
+    /**
+     * Omitting an MX priority is deprecated ahead of 2.0.0, which will require it: there is no
+     * correct default for relative ordering, and providers disagree about it. Until then the
+     * record still builds at 0, so a caller's behaviour does not change - only its test suite
+     * hears about it.
+     */
+    #[\PHPUnit\Framework\Attributes\IgnoreDeprecations]
+    public function test_omitting_an_mx_priority_is_deprecated_and_still_zero(): void
+    {
+        $this->expectUserDeprecationMessageMatches('/without a priority is deprecated/');
+
+        $this->assertSame(0, DomainRecord::mx('mail.example.com')->priority);
+    }
+
+    #[\PHPUnit\Framework\Attributes\IgnoreDeprecations]
+    public function test_a_null_mx_priority_is_the_same_as_omitting_it(): void
+    {
+        $this->expectUserDeprecationMessageMatches('/without a priority is deprecated/');
+
+        $this->assertSame(0, DomainRecord::mx('mail.example.com', null)->priority);
+    }
+
+    /**
+     * Passing it - zero included - is not deprecated. This is the half that must not regress:
+     * a caller who chose 0 deliberately gets no notice.
+     */
+    public function test_an_explicit_mx_priority_raises_nothing(): void
+    {
+        $this->assertSame(0, DomainRecord::mx('mail.example.com', 0)->priority);
+        $this->assertSame(10, DomainRecord::mx('mail.example.com', priority: 10)->priority);
+        $this->assertSame('mail', DomainRecord::mx('mail.example.com', 5, 'mail')->name);
     }
 
     public function test_priority_is_sent_only_where_it_means_something(): void
@@ -253,7 +286,7 @@ final class EntityTest extends BaseTestCase
 
         $this->assertSame('www.example.com', $record->fqdn('example.com'));
         $this->assertSame('www.example.com', $record->fqdn('example.com.'));
-        $this->assertSame('example.com', DomainRecord::mx('mail.example.com')->fqdn('example.com'));
+        $this->assertSame('example.com', DomainRecord::mx('mail.example.com', 10)->fqdn('example.com'));
     }
 
     /**
@@ -273,7 +306,7 @@ final class EntityTest extends BaseTestCase
 
     public function test_a_modelled_record_type_names_itself(): void
     {
-        $this->assertSame('MX', DomainRecord::mx('mail.example.com')->typeName());
+        $this->assertSame('MX', DomainRecord::mx('mail.example.com', 10)->typeName());
     }
 
     /**

@@ -212,6 +212,13 @@ by the first consumer, and reproduced here before acting on it.
 Adding a case to `RecordType`, `DomainType`, `DomainStatus` or `CaaTag` is a MAJOR, because an
 exhaustive `match` in a consumer throws `UnhandledMatchError` the day it lands.
 
+**What 2.0.0 is already committed to.** `DomainRecord::mx()`'s priority becomes required -
+deprecated in 1.3.0 (2026-09-18), because there is no right default for a field whose only job
+is relative ordering, and this package's 0 disagrees with the 10 that sibling clients default to.
+`srv()`'s priority and weight keep their default of 0 deliberately: every sibling package agrees
+on it, and a missing SRV weight only evens out a load share where a missing MX priority reorders
+delivery.
+
 ## The constraint to write is the one sentence a release can make harmful
 
 Most documentation goes stale. **A README that tells a reader what to pin states a fact a

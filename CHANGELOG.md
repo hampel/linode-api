@@ -1,5 +1,14 @@
 # Changelog
 
+## 1.3.0 (2026-09-18)
+
+* **deprecated:** calling `DomainRecord::mx()` without a priority. It still defaults to 0 and now
+  raises `E_USER_DEPRECATED`; 2.0.0 will require it. Passing the priority raises nothing
+* `DomainRecord::mx()`'s `$priority` accepts `null`, which is the same as omitting it
+* `DomainRecord::txt()` documents that a value over 255 characters round-trips as one string
+* the README's `ValidationException` example showed an error Linode cannot return; it now shows
+  the `page_size` one it does
+
 ## 1.2.0 (2026-09-14)
 
 **Breaking, released as a minor:** `DomainRecord::$type` and `Domain::$type` are nullable, and

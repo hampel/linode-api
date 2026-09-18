@@ -238,6 +238,11 @@ DomainRecord::ptr('10', 'www.example.com');
 and an empty name is the zone apex — which is what an MX or a CAA for the domain itself wants.
 `$record->fqdn('example.com')` renders the whole thing.
 
+**Always pass an MX priority.** Omitting it is deprecated and becomes an error in 2.0.0: there is
+no correct default for a field whose only job is relative ordering, and providers disagree about
+it, so records copied without one deliver mail in an order nobody chose. Until then an omitted
+priority is still 0 and raises `E_USER_DEPRECATED`.
+
 Four traps live in these, and each is why the constructor looks the way it does:
 
 - **SRV takes its service and protocol undecorated.** Linode prepends the underscore itself
